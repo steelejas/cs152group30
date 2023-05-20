@@ -1,22 +1,48 @@
 from enum import Enum, auto
 import discord
 import re
+from datetime import datetime
+import json
+
+class reported_message:
+    def __init__(self, reporter, message):
+        self.reporter = reporter 
+        self.message = message
+        self.time = datetime.now()
+    
+    def set_type(self, abuse_type):
+        self.abuse_type = abuse_type
+
+    def set_target(self, target):
+        self.target = target
+
+    def set_harassment_type(self, harassment_type):
+        self.harassment_type = harassment_type
+
+    def set_imminent_danger(self, imminent_danger):
+        self.imminent_danger = imminent_danger
 
 class State(Enum):
     REPORT_START = auto()
     AWAITING_MESSAGE = auto()
     MESSAGE_IDENTIFIED = auto()
     REPORT_COMPLETE = auto()
+    HARASSMENT_TYPE = auto()
+    IMMINENT_DANGER = auto()
+    HARASSMENT_TARGET = auto()
+
 
 class Report:
     START_KEYWORD = "report"
     CANCEL_KEYWORD = "cancel"
     HELP_KEYWORD = "help"
-
+    END_STRING = "Thank you for reporting. Our content moderation team will review the message and decide on the appripriate action. This may include post and/or account removal."
+    
     def __init__(self, client):
         self.state = State.REPORT_START
         self.client = client
         self.message = None
+        self.report = None
     
     async def handle_message(self, message):
         '''
@@ -38,6 +64,7 @@ class Report:
             return [reply]
         
         if self.state == State.AWAITING_MESSAGE:
+            reporter = message.author
             # Parse out the three ID strings from the message link
             m = re.search('/(\d+)/(\d+)/(\d+)', message.content)
             if not m:
@@ -55,13 +82,77 @@ class Report:
 
             # Here we've found the message - it's up to you to decide what to do next!
             self.state = State.MESSAGE_IDENTIFIED
+
+            self.report = reported_message(reporter, message)
+            self.message = message
             return ["I found this message:", "```" + message.author.name + ": " + message.content + "```", \
-                    "This is all I know how to do right now - it's up to you to build out the rest of my reporting flow!"]
+                    "Please select the reason for reporting the message.", \
+                    "- Harassment", \
+                    "- Spam", \
+                    "- Fraud", \
+                    "- Graphic/Violent Content, Gore", \
+                    "- Imminent Danger"
+                    ]
         
         if self.state == State.MESSAGE_IDENTIFIED:
-            return ["<insert rest of reporting flow here>"]
+            if message.content == "Harassment":
+                self.state = State.HARASSMENT_TARGET
+                return ["Please select who is being or will be harrassed.", \
+                        "- Against Myself", \
+                        "- Against Someone Else", \
+                        "- Against a group of people"
+                        ]
+            elif message.content == "Imminent Danger":
+                self.state = State.IMMINENT_DANGER
+                return ["Please select the type of imminent danger.", \
+                        "- Credible threat of violence", \
+                        "- Self-harm or suicidal intent", \
+                        "- Doxxing"
+                        ]
+            elif message.content in ["Spam", "Fraud", "Graphic/Violent Content, Gore"]:
+                self.state = State.REPORT_COMPLETE
+                self.report.set_type(message.content)
+                return [self.END_STRING]         
+            else:
+                self.state = State.REPORT_COMPLETE
+                self.report.set_type(message.content)
+                return [self.END_STRING]
 
-        return []
+        if self.state == State.HARASSMENT_TARGET:
+            if message.content in ["Against Myself", "Against Someone Else", "Against a group of people"]:
+                self.state = State.HARASSMENT_TYPE
+                self.report.set_target(message.content)
+                return ["Please select the type of harassment.", \
+                        "- Organizing of Harassment", \
+                        "- Impersonation", \
+                        "- Hate Speech", \
+                        "- Offensive content", \
+                        "- Sexual Harassment", \
+                        "- Doxxing", \
+                        "- Spam", \
+                        ]
+            else:
+                return ["Please select one of the three options", \
+                        "- Against Myself", \
+                        "- Against Someone Else", \
+                        "- Against a group of people", \
+                        "or say `cancel` to cancel."]
+
+        if self.state == State.HARASSMENT_TYPE:
+            if message.content in ["Organizing of Harassment", "Impersonation", "Hate Speech", "Offensive content", "Sexual Harassment", "Doxxing", "Spam"]:
+                self.state = State.REPORT_COMPLETE
+                self.report.set_harassment_type(message.content)
+                return [self.END_STRING]
+            else:
+                return ["Please select one of the harassment types or say `cancel` to cancel."]
+            
+        if self.state == State.IMMINENT_DANGER:
+            if message.content in ["Credible threat of violence", "Self-harm or suicidal intent", "Doxxing"]:
+                self.state = State.REPORT_COMPLETE
+                self.report.set_imminent_danger(message.content)
+                return [self.END_STRING]
+            else:
+                return ["Please select one of the imminent danger types or say `cancel` to cancel."]
 
     def report_complete(self):
         return self.state == State.REPORT_COMPLETE
