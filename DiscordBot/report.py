@@ -13,8 +13,8 @@ class reported_message:
     def set_type(self, abuse_type):
         self.abuse_type = abuse_type
 
-    def set_target(self, target):
-        self.target = target
+    def set_harassment_target(self, harassment_target):
+        self.harassment_target = harassment_target
 
     def set_harassment_type(self, harassment_type):
         self.harassment_type = harassment_type
@@ -96,6 +96,7 @@ class Report:
         
         if self.state == State.MESSAGE_IDENTIFIED:
             if message.content == "Harassment":
+                self.report.set_type(message.content)
                 self.state = State.HARASSMENT_TARGET
                 return ["Please select who is being or will be harrassed.", \
                         "- Against Myself", \
@@ -103,6 +104,7 @@ class Report:
                         "- Against a group of people"
                         ]
             elif message.content == "Imminent Danger":
+                self.report.set_type(message.content)
                 self.state = State.IMMINENT_DANGER
                 return ["Please select the type of imminent danger.", \
                         "- Credible threat of violence", \
@@ -110,18 +112,20 @@ class Report:
                         "- Doxxing"
                         ]
             elif message.content in ["Spam", "Fraud", "Graphic/Violent Content, Gore"]:
-                self.state = State.REPORT_COMPLETE
                 self.report.set_type(message.content)
+                self.state = State.REPORT_COMPLETE
+                await self.send_report_to_mod()
                 return [self.END_STRING]         
             else:
-                self.state = State.REPORT_COMPLETE
                 self.report.set_type(message.content)
+                self.state = State.REPORT_COMPLETE
+                await self.send_report_to_mod()
                 return [self.END_STRING]
 
         if self.state == State.HARASSMENT_TARGET:
             if message.content in ["Against Myself", "Against Someone Else", "Against a group of people"]:
+                self.report.set_harassment_target(message.content)
                 self.state = State.HARASSMENT_TYPE
-                self.report.set_target(message.content)
                 return ["Please select the type of harassment.", \
                         "- Organizing of Harassment", \
                         "- Impersonation", \
@@ -140,19 +144,39 @@ class Report:
 
         if self.state == State.HARASSMENT_TYPE:
             if message.content in ["Organizing of Harassment", "Impersonation", "Hate Speech", "Offensive content", "Sexual Harassment", "Doxxing", "Spam"]:
-                self.state = State.REPORT_COMPLETE
                 self.report.set_harassment_type(message.content)
+                self.state = State.REPORT_COMPLETE
+                await self.send_report_to_mod()
                 return [self.END_STRING]
             else:
                 return ["Please select one of the harassment types or say `cancel` to cancel."]
             
         if self.state == State.IMMINENT_DANGER:
             if message.content in ["Credible threat of violence", "Self-harm or suicidal intent", "Doxxing"]:
-                self.state = State.REPORT_COMPLETE
                 self.report.set_imminent_danger(message.content)
+                self.state = State.REPORT_COMPLETE
+                await self.send_report_to_mod()
                 return [self.END_STRING]
             else:
                 return ["Please select one of the imminent danger types or say `cancel` to cancel."]
+            
+    async def send_report_to_mod(self):
+        # Forward the report to the mod channel
+        reporter = self.report.reporter
+        message = self.report.message
+        mod_channel = self.client.mod_channels[message.guild.id]
+        await mod_channel.send(f'Reported message:\n'
+                               f'{message.author.name}: "{message.content}"\n'
+                               f'Reporter: {reporter.name}\n'
+                               f'Abuse Type: {self.report.abuse_type}\n'
+                               )
+        if self.report.abuse_type == "Harassment":
+            await mod_channel.send(f'Harassment Target: {self.report.harassment_target}\n'
+                                f'Harassment Type: {self.report.harassment_type}\n'
+                                )
+        elif self.report.abuse_type == "Imminent Danger":
+            await mod_channel.send(f'Imminent Danger Type: {self.report.imminent_danger}\n')
+
 
     def report_complete(self):
         return self.state == State.REPORT_COMPLETE
