@@ -33,6 +33,7 @@ class ModBot(discord.Client):
         super().__init__(command_prefix='.', intents=intents)
         self.group_num = None
         self.mod_channels = {} # Map from guild to the mod channel id for that guild
+        self.auto_mod_channels = {} # Map from guild to the automatic forwarding mod channel id for that guild
         self.reports = {} # Map from user IDs to the state of their report
 
     async def on_ready(self):
@@ -51,9 +52,10 @@ class ModBot(discord.Client):
         # Find the mod channel in each guild that this bot should report to
         for guild in self.guilds:
             for channel in guild.text_channels:
-                if channel.name == f'group-{self.group_num}-mod':
+                if channel.name == f'group-{self.group_num}-human-mod':
                     self.mod_channels[guild.id] = channel
-        
+                elif channel.name == f'group-{self.group_num}-mod':
+                    self.auto_mod_channels[guild.id] = channel
 
     async def on_message(self, message):
         '''
@@ -104,7 +106,7 @@ class ModBot(discord.Client):
             return
 
         # Forward the message to the mod channel
-        mod_channel = self.mod_channels[message.guild.id]
+        mod_channel = self.auto_mod_channels[message.guild.id]
         await mod_channel.send(f'Forwarded message:\n{message.author.name}: "{message.content}"')
         scores = self.eval_text(message.content)
         await mod_channel.send(self.code_format(scores))
