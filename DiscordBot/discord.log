@@ -1,4 +1,0 @@
-2023-05-11 02:54:57,627:WARNING:discord.client: PyNaCl is not installed, voice will NOT be supported
-2023-05-11 02:54:57,627:INFO:discord.client: logging in using static token
-2023-05-11 02:54:57,693:INFO:discord.client: Cleaning up tasks.
-2023-05-11 02:54:57,694:INFO:discord.client: Closing the event loop.

@@ -14,7 +14,7 @@ imminent_danger_category = {1: "Credible threat of violence", 2: "Self-harm or s
 
 harassment_category = {1: "Organizing of Harassment", 2: "Impersonation", 3: "Hate Speech", 4: "Offensive content", 5: "Sexual Harassment", 6: "Doxxing", 7: "Spam"}
 
-action_taken_user= {1: "Blocked the account", 2: "Slowed down the account", 3: "No action taken"}
+report_message_to_id = dict()
 
 class reported_message:
     def __init__(self, reporter, message):
@@ -22,6 +22,8 @@ class reported_message:
         self.reporter = reporter 
         self.message = message
         self.time = datetime.now()
+        self.safety_mode = False
+        self.block_user = list()
     
     def set_type(self, abuse_type):
         self.abuse_type = abuse_type
@@ -41,8 +43,11 @@ class reported_message:
     def set_other(self, other_details):
         self.other_details = other_details
 
-    def set_action_user(self, action_user):
-        self.action_user = action_user
+    def set_safety(self):
+        self.safety_mode = True
+    
+    def set_block_user(self, blocked_user):
+        self.block_user.append(blocked_user)
 
     
 class State(Enum):
@@ -55,7 +60,8 @@ class State(Enum):
     HARASSMENT_TARGET = auto()
     OTHER_DETAILS = auto()
     HARASSMENT_TARGET_DETAILS = auto()
-    ACTION_AWAITED=auto()
+    BLOCK_AWAITED=auto()
+    SAFETY_MODE = auto()
 
 
 class Report:
@@ -144,24 +150,12 @@ class Report:
                 self.state = State.OTHER_DETAILS
                 return ["Please describe details of the type of abuse or say \"skip\" to skip."]
             else:
-                self.state = State.ACTION_AWAITED
-                return ["Please select further action by entering its number.", \
-                    "1. Block user", \
-                    "2. Slow Down the account", \
-                    "3. None", \
-                    ]
-                # return await self.complete_report() 
+                return await self.block()
             
         
         if self.state == State.OTHER_DETAILS:
             self.report.set_other(message.content)
-            self.state=State.ACTION_AWAITED
-            return ["Please select further action by entering its number.", \
-                    "1. Block user", \
-                    "2. Slow Down the account", \
-                    "3. None", \
-                    ]
-            # return await self.complete_report()
+            return await self.block()
 
 
         if self.state == State.HARASSMENT_TARGET:
@@ -204,35 +198,50 @@ class Report:
         if self.state == State.HARASSMENT_TYPE:
             if not message.content.strip().isdigit() or int(message.content) < 1 or int(message.content) > 7: 
                 return ["Please select one of the harassment types or say `cancel` to cancel."]
-            else:
-                self.report.set_harassment_type(harassment_category[int(message.content)])
-                self.state=State.ACTION_AWAITED
-                return ["Please select further action by entering its number.", \
-                    "1. Block user", \
-                    "2. Slow Down the account", \
-                    "3. None", \
+            self.report.set_harassment_type(harassment_category[int(message.content)])
+            if self.report.harassment_target == "Against Myself":
+                self.state = State.SAFETY_MODE
+                return ["Do you want to turn on safety mode for your account?", \
+                        "This limits the people who can DM you or leave a message on your profile", \
+                        "This also slows down the number of message that can be left on your profile or sent to you", \
+                    "1. Yes", \
+                    "2. No", \
                     ]
-                # return await self.complete_report()
+            else:
+                return await self.block()
+
+        if self.state == State.SAFETY_MODE:
+            if not message.content.strip().isdigit() or int(message.content) < 1 or int(message.content) > 2: 
+                return ["Please select either 1 (Yes) or 2 (No)."]
+            channel = message.channel
+            if int(message.content) == 1:
+                await channel.send('We have activated safety mode on your account.')
+                self.report.set_safety()
+            return await self.block()
+
             
         if self.state == State.IMMINENT_DANGER:
             if not message.content.strip().isdigit() or int(message.content) < 1 or int(message.content) > 3: 
                 return ["Please select one of the imminent danger types or say `cancel` to cancel."]
             else:
                 self.report.set_imminent_danger(imminent_danger_category[int(message.content)])
-                self.state=State.ACTION_AWAITED
-                return ["Please select further action by entering its number.", \
-                    "1. Block user", \
-                    "2. Slow Down the account", \
-                    "3. None", \
-                    ]
-                # return await self.complete_report()
-        if self.state == State.ACTION_AWAITED:
-            if not message.content.strip().isdigit() or int(message.content) < 1 or int(message.content) > 3: 
-                return ["Please select one of the actions or say `cancel` to cancel."]
-            else:
-                self.report.set_action_user(action_taken_user[int(message.content)])
                 return await self.complete_report()
 
+        if self.state == State.BLOCK_AWAITED:
+            if not message.content.strip().isdigit() or int(message.content) < 1 or int(message.content) > 2: 
+                return ["Please select either 1 (Yes) or 2 (No)."]
+            channel = message.channel
+            if int(message.content) == 1:
+                await channel.send(f'We have blocked {self.report.message.author.name} for you.')
+                self.report.set_block_user(self.report.message.author.name)
+            return await self.complete_report()
+
+    async def block(self):
+        self.state = State.BLOCK_AWAITED
+        return ["Do you wish to block the person you are reporting?", \
+                "1. Yes", \
+                "2. No", \
+                ]
             
     async def complete_report(self):
         # Set state to end
@@ -243,22 +252,35 @@ class Report:
         reporter = self.report.reporter
         message = self.report.message
         mod_channel = self.client.mod_channels[message.guild.id]
-        report_string = f'''Report {self.report.id}:
-    Reported message:
-    {message.author.name}: "{message.content}"
-    Reporter: {reporter.name}
-    Abuse Type: {self.report.abuse_type}\n'''
+        report_string = f'''Report {self.report.id} at time {self.report.time}:
+\tReported message:
+\t{message.author.name}: "{message.content}"
+\tReporter: {reporter.name}
+\tAbuse Type: {self.report.abuse_type}\n'''
         if self.report.abuse_type == "Other":
-            report_string += f'''Abuse Type Details: {self.report.other_details}\n'''  
+            report_string += f'''\t\tAbuse Type Details: {self.report.other_details}\n'''  
         elif self.report.abuse_type == "Harassment":
-            report_string += f'''Harassment Target: {self.report.harassment_target}\n'''
+            report_string += f'''\t\tHarassment Target: {self.report.harassment_target}\n'''
             if self.report.harassment_target != "Against Myself":
-                report_string += f'''Harassment Target Details: {self.report.harassment_target_details}\n'''
-            report_string += f'''Harassment Type: {self.report.harassment_type}\n'''
+                report_string += f'''\t\t\tHarassment Target Details: {self.report.harassment_target_details}\n'''
+            report_string += f'''\t\tHarassment Type: {self.report.harassment_type}\n'''
         elif self.report.abuse_type == "Imminent Danger":
-            report_string += f'Imminent Danger Type: {self.report.imminent_danger}\n'
-        report_string+=f'Action taken by the user: {self.report.action_user}\n'
-        await mod_channel.send(report_string)
+            report_string += f'\t\tImminent Danger Type: {self.report.imminent_danger}\n'
+        report_string += f'\tHas reporter turned on safety mode: {self.report.safety_mode}\n'
+        report_string += f'\tHas reporter blocked message sender: {self.report.message.author.name in self.report.block_user}\n'
+        report_string += '''Press ⏱️ to place abuser under slow mode.
+Press 🛑 to block abuser for reporter.
+Press ❗ to send strike and warning to abuser.
+Press ❌ to ban abuser.
+Press ❔ to strike reporter for false report. (Only strike if false report is intentional)'''
+        sent_report = await mod_channel.send(report_string)
+        await sent_report.add_reaction(emoji="⏱️")
+        await sent_report.add_reaction(emoji="🛑")
+        await sent_report.add_reaction(emoji="❗")
+        await sent_report.add_reaction(emoji="❌")
+        await sent_report.add_reaction(emoji="❔")
+
+        report_message_to_id[sent_report.id] = self.report.id
         # return endstring
         return [self.END_STRING]
 
