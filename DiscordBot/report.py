@@ -14,6 +14,7 @@ imminent_danger_category = {1: "Credible threat of violence", 2: "Self-harm or s
 
 harassment_category = {1: "Organizing of Harassment", 2: "Impersonation", 3: "Hate Speech", 4: "Offensive content", 5: "Sexual Harassment", 6: "Doxxing", 7: "Spam"}
 
+action_taken_user= {1: "Blocked the account", 2: "Slowed down the account", 3: "No action taken"}
 
 class reported_message:
     def __init__(self, reporter, message):
@@ -40,6 +41,9 @@ class reported_message:
     def set_other(self, other_details):
         self.other_details = other_details
 
+    def set_action_user(self, action_user):
+        self.action_user = action_user
+
     
 class State(Enum):
     REPORT_START = auto()
@@ -51,6 +55,7 @@ class State(Enum):
     HARASSMENT_TARGET = auto()
     OTHER_DETAILS = auto()
     HARASSMENT_TARGET_DETAILS = auto()
+    ACTION_AWAITED=auto()
 
 
 class Report:
@@ -139,12 +144,24 @@ class Report:
                 self.state = State.OTHER_DETAILS
                 return ["Please describe details of the type of abuse or say \"skip\" to skip."]
             else:
-                return await self.complete_report() 
+                self.state = State.ACTION_AWAITED
+                return ["Please select further action by entering its number.", \
+                    "1. Block user", \
+                    "2. Slow Down the account", \
+                    "3. None", \
+                    ]
+                # return await self.complete_report() 
             
         
         if self.state == State.OTHER_DETAILS:
             self.report.set_other(message.content)
-            return await self.complete_report()
+            self.state=State.ACTION_AWAITED
+            return ["Please select further action by entering its number.", \
+                    "1. Block user", \
+                    "2. Slow Down the account", \
+                    "3. None", \
+                    ]
+            # return await self.complete_report()
 
 
         if self.state == State.HARASSMENT_TARGET:
@@ -190,14 +207,33 @@ class Report:
                 return ["Please select one of the harassment types or say `cancel` to cancel."]
             else:
                 self.report.set_harassment_type(message.content)
-                return await self.complete_report()
+                self.state=State.ACTION_AWAITED
+                return ["Please select further action by entering its number.", \
+                    "1. Block user", \
+                    "2. Slow Down the account", \
+                    "3. None", \
+                    ]
+                # return await self.complete_report()
             
         if self.state == State.IMMINENT_DANGER:
             if not message.content.strip().isdigit() or int(message.content) < 1 or int(message.content) > 3: 
                 return ["Please select one of the imminent danger types or say `cancel` to cancel."]
             else:
                 self.report.set_imminent_danger(message.content)
+                self.state=State.ACTION_AWAITED
+                return ["Please select further action by entering its number.", \
+                    "1. Block user", \
+                    "2. Slow Down the account", \
+                    "3. None", \
+                    ]
+                # return await self.complete_report()
+        if self.state == State.ACTION_AWAITED:
+            if not message.content.strip().isdigit() or int(message.content) < 1 or int(message.content) > 3: 
+                return ["Please select one of the actions or say `cancel` to cancel."]
+            else:
+                self.report.set_action_user(action_taken_user[int(message.content)])
                 return await self.complete_report()
+
             
     async def complete_report(self):
         # Set state to end
@@ -222,6 +258,7 @@ class Report:
             report_string += f'''Harassment Type: {self.report.harassment_type}\n'''
         elif self.report.abuse_type == "Imminent Danger":
             report_string += f'Imminent Danger Type: {self.report.imminent_danger}\n'
+        report_string+=f'Action taken by the user: {self.report.action_user}\n'
         await mod_channel.send(report_string)
         # return endstring
         return [self.END_STRING]
