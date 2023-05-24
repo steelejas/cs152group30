@@ -8,6 +8,7 @@ import re
 import requests
 from report import Report
 import pdb
+import globals
 
 # Set up logging to the console
 logger = logging.getLogger('discord')
@@ -111,7 +112,16 @@ class ModBot(discord.Client):
         scores = self.eval_text(message.content)
         await mod_channel.send(self.code_format(scores))
 
-    
+    async def on_raw_reaction_add(self, payload):
+        if not payload.channel_id == self.mod_channels[payload.guild_id].id:
+            return  
+        if not payload.message_id in globals.report_message_to_id.keys():
+            return
+        if not payload.emoji.name in ["⏱️", "🛑", "❗", "❌", "❔"]:
+            print("wrong emote")
+            return
+        print("processing")
+
     def eval_text(self, message):
         ''''
         TODO: Once you know how you want to evaluate messages in your channel, 

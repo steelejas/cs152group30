@@ -3,8 +3,8 @@ import discord
 import re
 from datetime import datetime
 import uuid
+import globals
 
-reports = dict()
 
 report_category = {1: "Harassment", 2: "Spam", 3: "Fraud", 4: "Graphic/Violent Content, Gore", 5: "Imminent Danger", 6: "Other"}
 
@@ -13,8 +13,6 @@ target = {1: "Against Myself", 2: "Against Someone Else", 3: "Against a group of
 imminent_danger_category = {1: "Credible threat of violence", 2: "Self-harm or suicidal intent", 3: "Doxxing"}
 
 harassment_category = {1: "Organizing of Harassment", 2: "Impersonation", 3: "Hate Speech", 4: "Offensive content", 5: "Sexual Harassment", 6: "Doxxing", 7: "Spam"}
-
-report_message_to_id = dict()
 
 class reported_message:
     def __init__(self, reporter, message):
@@ -247,7 +245,7 @@ class Report:
         # Set state to end
         self.state = State.REPORT_COMPLETE
         # Store report in list
-        reports[self.report.id] = self.report
+        globals.reports[self.report.id] = self.report
         # Forward the report to the mod channel
         reporter = self.report.reporter
         message = self.report.message
@@ -280,7 +278,7 @@ Press ❔ to strike reporter for false report. (Only strike if false report is i
         await sent_report.add_reaction(emoji="❌")
         await sent_report.add_reaction(emoji="❔")
 
-        report_message_to_id[sent_report.id] = self.report.id
+        globals.report_message_to_id[sent_report.id] = self.report.id
         # return endstring
         return [self.END_STRING]
 
