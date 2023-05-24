@@ -168,7 +168,6 @@ class Report:
                         "7. Spam", \
                         ]
             else:
-                self.report.set_harassment_target(message.content)
                 self.state = State.HARASSMENT_TARGET_DETAILS
                 return ["Please describe details of the targeted user or group or say \"skip\" to skip."]
             
@@ -189,14 +188,14 @@ class Report:
             if not message.content.strip().isdigit() or int(message.content) < 1 or int(message.content) > 7: 
                 return ["Please select one of the harassment types or say `cancel` to cancel."]
             else:
-                self.report.set_harassment_type(message.content)
+                self.report.set_harassment_type(harassment_category[int(message.content)])
                 return await self.complete_report()
             
         if self.state == State.IMMINENT_DANGER:
             if not message.content.strip().isdigit() or int(message.content) < 1 or int(message.content) > 3: 
                 return ["Please select one of the imminent danger types or say `cancel` to cancel."]
             else:
-                self.report.set_imminent_danger(message.content)
+                self.report.set_imminent_danger(imminent_danger_category[int(message.content)])
                 return await self.complete_report()
             
     async def complete_report(self):
