@@ -1,11 +1,10 @@
 from enum import Enum, auto
 import discord
 import re
-from datetime import datetime
+from datetime import datetime, timezone
+import pytz
 import uuid
 import globals
-import copy
-
 
 report_category = {1: "Harassment", 2: "Spam", 3: "Fraud", 4: "Graphic/Violent Content, Gore", 5: "Imminent Danger", 6: "Other"}
 
@@ -20,9 +19,10 @@ class reported_message:
         self.id = uuid.uuid4()
         self.reporter = reporter 
         self.message = message
-        self.time = datetime.now()
+        self.message_created_time = message.created_at
+        self.report_created_time = datetime.now(timezone.utc)
         self.safety_mode = False
-        self.block_user = list()
+        self.block_user = set()
     
     def set_type(self, abuse_type):
         self.abuse_type = abuse_type
@@ -46,7 +46,7 @@ class reported_message:
         self.safety_mode = True
     
     def set_block_user(self, blocked_user):
-        self.block_user.append(blocked_user)
+        self.block_user.add(blocked_user)
 
     
 class State(Enum):
@@ -230,12 +230,14 @@ class Report:
                 return ["Please select either 1 (Yes) or 2 (No)."]
             channel = message.channel
             if int(message.content) == 1:
-                await channel.send(f'We have blocked {self.report.message.author.name} for you.')
-                self.report.set_block_user(self.report.message.author.name)
+                blocklist = set()
+                blocklist.add(self.report.message.author.name)
                 if len(self.report.other_messages) > 0:
                     for message in self.report.other_messages:
-                        await channel.send(f'We have blocked {message.author.name} for you.')
-                        self.report.set_block_user(message.author.name)
+                        blocklist.add(message.author.name)
+                for user in blocklist:
+                    await channel.send(f'We have blocked {user} for you.')
+                    self.report.set_block_user(user)
             return await self.complete_report()
 
     async def add_multiple_messages(self):
@@ -270,6 +272,7 @@ class Report:
                     new_report.set_safety()
                 if len(self.report.block_user) > 0:
                     new_report.set_block_user(message.author.name)
+                globals.reports[new_report.id] = new_report
                 return_string.append(await self.send_reports(new_report))
         return return_string
     
@@ -278,9 +281,10 @@ class Report:
         reporter = report.reporter
         message = report.message
         mod_channel = self.client.mod_channels[message.guild.id]
-        report_string = f'''Report {report.id} at time {report.time}:
+        report_string = f'''Report {report.id} at time {report.report_created_time.astimezone()}:
 \tReported message:
 \t{message.author.name}: "{message.content}"
+\tLink:{message.jump_url}
 \tReporter: {reporter.name}
 \tAbuse Type: {self.report.abuse_type}\n'''
         if report.abuse_type == "Other":
@@ -317,8 +321,8 @@ Press ⬆️ to escalate to a specialized team that handles organized harassment
         globals.report_message_to_id[sent_report.id] = report.id
 
         # send endstring
-        reporter_dm = report.reporter.dm_channel if report.reporter.dm_channel else report.reporter.create_dm()
-        return f'''Thank you for reporting. Your report has been filed as report {report.id}.
+        return f'''Thank you for reporting {report.abuse_type}. Your report has been filed as report {report.id}.
+We will notify you when your report has begun
 Our content moderation team will review the message and decide on the appropriate action. 
 This may include post and/or account removal.'''
 
