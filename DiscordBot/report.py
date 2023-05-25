@@ -4,6 +4,7 @@ import re
 from datetime import datetime
 import uuid
 import globals
+import copy
 
 
 report_category = {1: "Harassment", 2: "Spam", 3: "Fraud", 4: "Graphic/Violent Content, Gore", 5: "Imminent Danger", 6: "Other"}
@@ -26,20 +27,20 @@ class reported_message:
     def set_type(self, abuse_type):
         self.abuse_type = abuse_type
 
-    def set_harassment_target(self, harassment_target):
-        self.harassment_target = harassment_target
-    
-    def set_harassment_target_details(self, harassment_target_details):
-        self.harassment_target_details = harassment_target_details
-
     def set_harassment_type(self, harassment_type):
         self.harassment_type = harassment_type
+
+    def set_multiple_harasser(self, multiple_harasser):
+        self.multiple_harasser = multiple_harasser
 
     def set_imminent_danger(self, imminent_danger):
         self.imminent_danger = imminent_danger
 
     def set_other(self, other_details):
         self.other_details = other_details
+
+    def add_other_messages(self, other_messages):
+        self.other_messages = other_messages
 
     def set_safety(self):
         self.safety_mode = True
@@ -55,18 +56,17 @@ class State(Enum):
     REPORT_COMPLETE = auto()
     HARASSMENT_TYPE = auto()
     IMMINENT_DANGER = auto()
-    HARASSMENT_TARGET = auto()
     OTHER_DETAILS = auto()
-    HARASSMENT_TARGET_DETAILS = auto()
-    BLOCK_AWAITED=auto()
+    BLOCK_AWAITED = auto()
     SAFETY_MODE = auto()
+    MULTIPLE_HARASSER = auto()
+    ADD_MESSAGES = auto()
 
 
 class Report:
     START_KEYWORD = "report"
     CANCEL_KEYWORD = "cancel"
     HELP_KEYWORD = "help"
-    END_STRING = "Thank you for reporting. Our content moderation team will review the message and decide on the appropriate action. This may include post and/or account removal."
     
     def __init__(self, client):
         self.state = State.REPORT_START
@@ -131,11 +131,15 @@ class Report:
                         "or say `cancel` to cancel."]
             self.report.set_type(report_category[int(message.content)])
             if int(message.content) == 1:
-                self.state = State.HARASSMENT_TARGET
-                return ["Please select who is being or will be harrassed by entering its number.", \
-                        "1. Against Myself", \
-                        "2. Against Someone Else", \
-                        "3. Against a group of people"
+                self.state = State.HARASSMENT_TYPE
+                return ["Please select the type of harassment by entering its number.", \
+                        "1. Organizing of Harassment", \
+                        "2. Impersonation", \
+                        "3. Hate Speech", \
+                        "4. Offensive content", \
+                        "5. Sexual Harassment", \
+                        "6. Doxxing", \
+                        "7. Spam", \
                         ]
             elif int(message.content) == 5:
                 self.state = State.IMMINENT_DANGER
@@ -148,65 +152,65 @@ class Report:
                 self.state = State.OTHER_DETAILS
                 return ["Please describe details of the type of abuse or say \"skip\" to skip."]
             else:
-                return await self.block()
+                return await self.add_multiple_messages()
             
         
         if self.state == State.OTHER_DETAILS:
             self.report.set_other(message.content)
-            return await self.block()
-
-
-        if self.state == State.HARASSMENT_TARGET:
-            if not message.content.strip().isdigit() or int(message.content) < 1 or int(message.content) > 3: 
-                return ["Please select one of the three options by entering its number.", \
-                        "1. Against Myself", \
-                        "2. Against Someone Else", \
-                        "3. Against a group of people", \
-                        "or say `cancel` to cancel.", \
-                        ]
-            self.report.set_harassment_target(target[int(message.content)])
-            if int(message.content) == 1:
-                self.state = State.HARASSMENT_TYPE
-                return ["Please select the type of harassment by entering its number.", \
-                        "1. Organizing of Harassment", \
-                        "2. Impersonation", \
-                        "3. Hate Speech", \
-                        "4. Offensive content", \
-                        "5. Sexual Harassment", \
-                        "6. Doxxing", \
-                        "7. Spam", \
-                        ]
-            else:
-                self.state = State.HARASSMENT_TARGET_DETAILS
-                return ["Please describe details of the targeted user or group or say \"skip\" to skip."]
-            
-        if self.state == State.HARASSMENT_TARGET_DETAILS:
-            self.report.set_harassment_target_details(message.content)
-            self.state = State.HARASSMENT_TYPE
-            return ["Please select the type of harassment by entering its number.", \
-                    "1. Organizing of Harassment", \
-                    "2. Impersonation", \
-                    "3. Hate Speech", \
-                    "4. Offensive content", \
-                    "5. Sexual Harassment", \
-                    "6. Doxxing", \
-                    "7. Spam", \
-                    ]
+            return await self.add_multiple_messages()
 
         if self.state == State.HARASSMENT_TYPE:
             if not message.content.strip().isdigit() or int(message.content) < 1 or int(message.content) > 7: 
                 return ["Please select one of the harassment types or say `cancel` to cancel."]
             self.report.set_harassment_type(harassment_category[int(message.content)])
-            if self.report.harassment_target == "Against Myself":
-                self.state = State.SAFETY_MODE
-                return ["Do you want to turn on safety mode for your account?", \
-                        "This limits the people who can DM you or leave a message on your profile", \
-                        "This also slows down the number of message that can be left on your profile or sent to you", \
+            self.state = State.MULTIPLE_HARASSER
+            return ["Are there multiple users involved in the harassment?", \
                     "1. Yes", \
                     "2. No", \
                     ]
+        
+        if self.state == State.MULTIPLE_HARASSER:
+            if not message.content.strip().isdigit() or int(message.content) < 1 or int(message.content) > 7: 
+                return ["Please select yes or no or say `cancel` to cancel."]
+            if int(message.content) == 1:
+                self.report.set_multiple_harasser(True)
+            else: 
+                self.report.set_multiple_harasser(False)
+            return await self.add_multiple_messages()
+
+        if self.state == State.IMMINENT_DANGER:
+            if not message.content.strip().isdigit() or int(message.content) < 1 or int(message.content) > 3: 
+                return ["Please select one of the imminent danger types or say `cancel` to cancel."]
             else:
-                return await self.block()
+                self.report.set_imminent_danger(imminent_danger_category[int(message.content)])
+                return await self.add_multiple_messages()
+
+        if self.state == State.ADD_MESSAGES: 
+            reported_message_list = message.content.split()
+            valid_message_list = list()
+            for message in reported_message_list:
+                m = re.search('/(\d+)/(\d+)/(\d+)', message)
+                if not m:
+                    continue
+                guild = self.client.get_guild(int(m.group(1)))
+                if not guild:
+                    continue
+                channel = guild.get_channel(int(m.group(2)))
+                if not channel:
+                    continue
+                try:
+                    message = await channel.fetch_message(int(m.group(3)))
+                    valid_message_list.append(message)
+                except discord.errors.NotFound:
+                    continue
+            self.report.add_other_messages(valid_message_list)
+            self.state = State.SAFETY_MODE
+            return ["Do you want to turn on safety mode for your account?", \
+                    "This limits the people who can DM you or leave a message on your profile", \
+                    "This also slows down the number of message that can be left on your profile or sent to you", \
+                "1. Yes", \
+                "2. No", \
+                ]
 
         if self.state == State.SAFETY_MODE:
             if not message.content.strip().isdigit() or int(message.content) < 1 or int(message.content) > 2: 
@@ -215,15 +219,11 @@ class Report:
             if int(message.content) == 1:
                 await channel.send('We have activated safety mode on your account.')
                 self.report.set_safety()
-            return await self.block()
-
-            
-        if self.state == State.IMMINENT_DANGER:
-            if not message.content.strip().isdigit() or int(message.content) < 1 or int(message.content) > 3: 
-                return ["Please select one of the imminent danger types or say `cancel` to cancel."]
-            else:
-                self.report.set_imminent_danger(imminent_danger_category[int(message.content)])
-                return await self.complete_report()
+            self.state = State.BLOCK_AWAITED
+            return ["Do you wish to block the person you are reporting?", \
+                    "1. Yes", \
+                    "2. No", \
+                    ]
 
         if self.state == State.BLOCK_AWAITED:
             if not message.content.strip().isdigit() or int(message.content) < 1 or int(message.content) > 2: 
@@ -232,55 +232,95 @@ class Report:
             if int(message.content) == 1:
                 await channel.send(f'We have blocked {self.report.message.author.name} for you.')
                 self.report.set_block_user(self.report.message.author.name)
+                if len(self.report.other_messages) > 0:
+                    for message in self.report.other_messages:
+                        await channel.send(f'We have blocked {message.author.name} for you.')
+                        self.report.set_block_user(message.author.name)
             return await self.complete_report()
 
-    async def block(self):
-        self.state = State.BLOCK_AWAITED
-        return ["Do you wish to block the person you are reporting?", \
-                "1. Yes", \
-                "2. No", \
+    async def add_multiple_messages(self):
+        self.state = State.ADD_MESSAGES
+        return ["Are there any other similar messages that you would like to report?", \
+                "They will be filed under separate reports", \
+                "Please copy and paste all the links to the messages you want to report separated by spaces or shift-enter", \
+                "You can obtain this link by right-clicking the message and clicking `Copy Message Link`.", \
+                "or type skip to skip.", \
                 ]
-            
+
     async def complete_report(self):
         # Set state to end
         self.state = State.REPORT_COMPLETE
+        return_string = list()
         # Store report in list
         globals.reports[self.report.id] = self.report
+        return_string.append(await self.send_reports(self.report))
+        # Generate new reports if multiple messages were added
+        if len(self.report.other_messages) > 0:
+            for message in self.report.other_messages:
+                new_report = reported_message(self.report.reporter, message)
+                new_report.set_type(self.report.abuse_type)
+                if new_report.abuse_type == "Other":
+                    new_report.set_other(self.report.other_details)
+                elif new_report.abuse_type == "Harassment":
+                    new_report.set_harassment_type(self.report.harassment_type)
+                    new_report.set_multiple_harasser(self.report.multiple_harasser)
+                elif new_report.abuse_type == "Imminent Danger":
+                    new_report.set_imminent_danger(self.report.imminent_danger)
+                if self.report.safety_mode == True:
+                    new_report.set_safety()
+                if len(self.report.block_user) > 0:
+                    new_report.set_block_user(message.author.name)
+                return_string.append(await self.send_reports(new_report))
+        return return_string
+    
+    async def send_reports(self, report):
         # Forward the report to the mod channel
-        reporter = self.report.reporter
-        message = self.report.message
+        reporter = report.reporter
+        message = report.message
         mod_channel = self.client.mod_channels[message.guild.id]
-        report_string = f'''Report {self.report.id} at time {self.report.time}:
+        report_string = f'''Report {report.id} at time {report.time}:
 \tReported message:
 \t{message.author.name}: "{message.content}"
 \tReporter: {reporter.name}
 \tAbuse Type: {self.report.abuse_type}\n'''
-        if self.report.abuse_type == "Other":
-            report_string += f'''\t\tAbuse Type Details: {self.report.other_details}\n'''  
-        elif self.report.abuse_type == "Harassment":
-            report_string += f'''\t\tHarassment Target: {self.report.harassment_target}\n'''
-            if self.report.harassment_target != "Against Myself":
-                report_string += f'''\t\t\tHarassment Target Details: {self.report.harassment_target_details}\n'''
-            report_string += f'''\t\tHarassment Type: {self.report.harassment_type}\n'''
-        elif self.report.abuse_type == "Imminent Danger":
-            report_string += f'\t\tImminent Danger Type: {self.report.imminent_danger}\n'
-        report_string += f'\tHas reporter turned on safety mode: {self.report.safety_mode}\n'
-        report_string += f'\tHas reporter blocked message sender: {self.report.message.author.name in self.report.block_user}\n'
+        if report.abuse_type == "Other":
+            report_string += f'''\t\tAbuse Type Details: {report.other_details}\n'''  
+        elif report.abuse_type == "Harassment":
+            report_string += f'''\t\tHarassment Type: {report.harassment_type}\n'''
+            report_string += f'''\t\tMultiple Harassers: {report.multiple_harasser}\n'''
+        elif report.abuse_type == "Imminent Danger":
+            report_string += f'\t\tImminent Danger Type: {report.imminent_danger}\n'
+        report_string += f'\tHas reporter turned on safety mode: {report.safety_mode}\n'
+        report_string += f'\tHas reporter blocked message sender: {report.message.author.name in report.block_user}\n'
         report_string += '''Press ⏱️ to place abuser under slow mode.
 Press 🛑 to block abuser for reporter.
-Press ❗ to send strike and warning to abuser.
-Press ❌ to ban abuser.
-Press ❔ to strike reporter for false report. (Only strike if false report is intentional)'''
+Press 🗑️ to delete the message.\n'''
+        if globals.user_followers[message.author.name] > 5000:
+            report_string += 'Press ‼️ to send strike and warning to abuser.\n'
+        else: 
+            report_string += 'Press ❗ to send strike and warning to abuser.\n'
+        report_string += '''Press ❌ to ban abuser.
+Press ❔ to strike reporter for false report. (Only strike if false report is intentional)
+Press ⬆️ to escalate to a specialized team that handles organized harassment'''
         sent_report = await mod_channel.send(report_string)
         await sent_report.add_reaction(emoji="⏱️")
         await sent_report.add_reaction(emoji="🛑")
-        await sent_report.add_reaction(emoji="❗")
+        await sent_report.add_reaction(emoji="🗑️")
+        if globals.user_followers[message.author.name] > 5000:
+            await sent_report.add_reaction(emoji="‼️")
+        else: 
+            await sent_report.add_reaction(emoji="❗")
         await sent_report.add_reaction(emoji="❌")
         await sent_report.add_reaction(emoji="❔")
+        await sent_report.add_reaction(emoji="⬆️")
 
-        globals.report_message_to_id[sent_report.id] = self.report.id
-        # return endstring
-        return [self.END_STRING]
+        globals.report_message_to_id[sent_report.id] = report.id
+
+        # send endstring
+        reporter_dm = report.reporter.dm_channel if report.reporter.dm_channel else report.reporter.create_dm()
+        return f'''Thank you for reporting. Your report has been filed as report {report.id}.
+Our content moderation team will review the message and decide on the appropriate action. 
+This may include post and/or account removal.'''
 
 
     def report_complete(self):

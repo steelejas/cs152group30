@@ -117,10 +117,33 @@ class ModBot(discord.Client):
             return  
         if not payload.message_id in globals.report_message_to_id.keys():
             return
-        if not payload.emoji.name in ["⏱️", "🛑", "❗", "❌", "❔"]:
-            print("wrong emote")
+        if not payload.emoji.name in ["⏱️", "🛑", "🗑️", "❗", "‼️", "❌", "❔", "⬆️"]:
             return
-        print("processing")
+        report_id = globals.report_message_to_id[payload.message_id]
+        report = globals.reports[report_id]
+        abuser = report.message.author
+        abuser_dm = abuser.dm_channel if abuser.dm_channel else abuser.create_dm()
+        reporter_dm = report.reporter.dm_channel if report.reporter.dm_channel else report.reporter.create_dm()
+        if payload.emoji.name == "⏱️":
+            abuser_dm.send(f'''Your message {report.message.jump_url} has been reported for {report.abuse_type}. 
+As such, your account would be placed under slow mode for the next 72 hours.''')
+            reporter_dm.send(f'Your report {report.id} has been resolved. The abuser has been placed under slow mode.')
+        elif payload.emoji.name == "🛑":
+            reporter_dm.send(f'Your report {report.id} has been resolved. All messages from the abuser will now be blocked.')
+        elif payload.emoji.name == "🗑️":
+            abuser_dm.send(f'''Your message {report.message.jump_url} has been reported for {report.abuse_type}. 
+As such, your message has been deleted.''')
+            reporter_dm.send(f'Your report {report.id} has been resolved. The message has been deleted.')
+        elif payload.emoji.name == "❗" or payload.emoji.name == "‼️":
+            abuser_dm.send(f'''Your account has been given a strike for abuse.''')
+            reporter_dm.send(f'Your report {report.id} has been resolved. The abuser has been given a strike.')
+        elif payload.emoji.name == "❌":
+            abuser_dm.send(f'''Your account has been banned for abuse.''')
+            reporter_dm.send(f'Your report {report.id} has been resolved. The abuser has been banned.')
+        elif payload.emoji.name == "❔":
+            reporter_dm.send(f'Your report {report.id} has been resolved and classified as an intentional false report. Please refrain from filing false reports.')
+        elif payload.emoji.name == "⬆️":
+            reporter_dm.send(f'Your report {report.id} has been escalated to a specialized team.')
 
     def eval_text(self, message):
         ''''
