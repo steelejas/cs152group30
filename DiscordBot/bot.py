@@ -158,11 +158,11 @@ Your account has been banned for abuse.''')
                     break
             globals.user_false_report_strikes[reporter].append(report)
             if len(globals.user_false_report_strikes[reporter]) < 3:
-                await reporter_dm.send(f'''Your report {report.id} has been resolved and classified as an intentional false report.
+                await reporter_dm.send(f'''Your report {report.id} has been resolved and classified as a malicious false report.
 You have been given a strike and is currently at {len(globals.user_false_report_strikes[reporter])} strikes.
 You would be banned if you reach 3 strikes. Please refrain from filing malicious false reports.''')
             else:
-                await reporter_dm.send(f'''Your report {report.id} has been resolved and classified as an intentional false report.
+                await reporter_dm.send(f'''Your report {report.id} has been resolved and classified as a malicious false report.
 You have reached three strikes for false reports. 
 Your account has been banned for filing malicious false reports.''')
         elif payload.emoji.name == "❗" or payload.emoji.name == "‼️":

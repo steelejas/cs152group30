@@ -115,38 +115,38 @@ class Report:
 
             self.report = reported_message(reporter, message)
             self.message = message
-            return ["I found this message:", "```" + message.author.name + ": " + message.content + "```", \
-                    "Please select the reason for reporting the message by entering its number.", \
-                    "1. Harassment", \
-                    "2. Spam", \
-                    "3. Fraud", \
-                    "4. Graphic/Violent Content, Gore", \
-                    "5. Imminent Danger", \
-                    "6. Other"
-                    ]
+            return [f'''I found this message:```{message.author.name}: {message.content}```
+Please select the reason for reporting the message by entering its number.
+1. Harassment
+2. Spam
+3. Fraud
+4. Graphic/Violent Content, Gore
+5. Imminent Danger
+6. Other'''
+]
         
         if self.state == State.MESSAGE_IDENTIFIED:
             if not message.content.strip().isdigit() or int(message.content) < 1 or int(message.content) > 6: 
-                return ["Please enter a number from 1 to 6 corresponding to the category of abuse.", \
-                        "or say `cancel` to cancel."]
+                return ['''Please enter a number from 1 to 6 corresponding to the category of abuse.
+or say `cancel` to cancel.''']
             self.report.set_type(report_category[int(message.content)])
             if int(message.content) == 1:
                 self.state = State.HARASSMENT_TYPE
-                return ["Please select the type of harassment by entering its number.", \
-                        "1. Organizing of Harassment", \
-                        "2. Impersonation", \
-                        "3. Hate Speech", \
-                        "4. Offensive content", \
-                        "5. Sexual Harassment", \
-                        "6. Doxxing", \
-                        "7. Spam", \
+                return ['''Please select the type of harassment by entering its number.
+1. Organizing of Harassment
+2. Impersonation
+3. Hate Speech
+4. Offensive content
+5. Sexual Harassment
+6. Doxxing
+7. Spam'''
                         ]
             elif int(message.content) == 5:
                 self.state = State.IMMINENT_DANGER
-                return ["Please select the type of imminent danger by entering its number.", \
-                        "1. Credible threat of violence", \
-                        "2. Self-harm or suicidal intent", \
-                        "3. Doxxing"
+                return ['''Please select the type of imminent danger by entering its number.
+1. Credible threat of violence
+2. Self-harm or suicidal intent
+3. Doxxing'''
                         ]
             elif int(message.content) == 6:
                 self.state = State.OTHER_DETAILS
@@ -164,9 +164,9 @@ class Report:
                 return ["Please select one of the harassment types or say `cancel` to cancel."]
             self.report.set_harassment_type(harassment_category[int(message.content)])
             self.state = State.MULTIPLE_HARASSER
-            return ["Are there multiple users involved in the harassment?", \
-                    "1. Yes", \
-                    "2. No", \
+            return ['''Are there multiple users involved in the harassment?
+1. Yes
+2. No'''
                     ]
         
         if self.state == State.MULTIPLE_HARASSER:
@@ -205,11 +205,11 @@ class Report:
                     continue
             self.report.add_other_messages(valid_message_list)
             self.state = State.SAFETY_MODE
-            return ["Do you want to turn on safety mode for your account?", \
-                    "This limits the people who can DM you or leave a message on your profile", \
-                    "This also slows down the number of message that can be left on your profile or sent to you", \
-                "1. Yes", \
-                "2. No", \
+            return ['''Do you want to turn on safety mode for your account?
+This limits the people who can DM you or leave a message on your profile
+This also slows down the number of message that can be left on your profile or sent to you
+1. Yes
+2. No'''
                 ]
 
         if self.state == State.SAFETY_MODE:
@@ -220,9 +220,9 @@ class Report:
                 await channel.send('We have activated safety mode on your account.')
                 self.report.set_safety()
             self.state = State.BLOCK_AWAITED
-            return ["Do you wish to block the person you are reporting?", \
-                    "1. Yes", \
-                    "2. No", \
+            return ['''Do you wish to block the person you are reporting?
+1. Yes
+2. No'''
                     ]
 
         if self.state == State.BLOCK_AWAITED:
@@ -242,11 +242,11 @@ class Report:
 
     async def add_multiple_messages(self):
         self.state = State.ADD_MESSAGES
-        return ["Are there any other similar messages that you would like to report?", \
-                "They will be filed under separate reports", \
-                "Please copy and paste all the links to the messages you want to report separated by spaces or shift-enter", \
-                "You can obtain this link by right-clicking the message and clicking `Copy Message Link`.", \
-                "or type skip to skip.", \
+        return ['''Are there any other similar messages that you would like to report?
+They will be filed under separate reports
+Please copy and paste all the links to the messages you want to report separated by spaces or shift-enter
+You can obtain this link by right-clicking the message and clicking `Copy Message Link`.
+or type skip to skip.'''
                 ]
 
     async def complete_report(self):
@@ -304,7 +304,7 @@ Press 🗑️ to delete the message.\n'''
         else: 
             report_string += 'Press ❗ to send strike and warning to abuser.\n'
         report_string += '''Press ❌ to ban abuser.
-Press ❔ to strike reporter for false report. (Only strike if false report is intentional)
+Press ❔ to strike reporter for false report. (Only strike if false report is intentional and malicious)
 Press ⬆️ to escalate to a specialized team that handles organized harassment'''
         sent_report = await mod_channel.send(report_string)
         await sent_report.add_reaction(emoji="⏱️")
@@ -321,11 +321,19 @@ Press ⬆️ to escalate to a specialized team that handles organized harassment
         globals.report_message_to_id[sent_report.id] = report.id
 
         # send endstring
-        return f'''Thank you for reporting {report.abuse_type}. Your report has been filed as report {report.id}.
-We will notify you when your report has begun
-Our content moderation team will review the message and decide on the appropriate action. 
-This may include post and/or account removal.'''
-
+        if report.abuse_type == "Harassment":
+            endstring = f'''Thank you for reporting {report.abuse_type}. Your report has been filed as report {report.id}.
+We will notify you when your report has been reviewed and appropriate actions has been taken.
+This may include a warning or banning the user and removing the content.'''
+        elif report.abuse_type == "Imminent Danger":
+            endstring = f'''Thank you for reporting {report.abuse_type}. Your report has been filed as report {report.id}.
+We will notify you when your report has been reviewed and appropriate actions has been taken.
+This may include notification of authorities if necessary.'''
+        else:
+            endstring = f'''Thank you for reporting {report.abuse_type}. Your report has been filed as report {report.id}.
+We will notify you when your report has been reviewed and appropriate actions has been taken.
+This may include removing the content.'''
+        return endstring 
 
     def report_complete(self):
         return self.state == State.REPORT_COMPLETE
