@@ -165,7 +165,7 @@ You would be banned if you reach 3 strikes. Please refrain from filing malicious
                 await reporter_dm.send(f'''Your report {report.id} has been resolved and classified as a malicious false report.
 You have reached three strikes for false reports. 
 Your account has been banned for filing malicious false reports.''')
-        elif payload.emoji.name == "❗" or payload.emoji.name == "‼️":
+        elif payload.emoji.name == "❗":
             if abuser not in globals.user_strikes:
                 globals.user_strikes[abuser] = list()
             while True:
@@ -179,16 +179,10 @@ Your account has been banned for filing malicious false reports.''')
                     break
             globals.user_strikes[abuser].append(report)
             if len(globals.user_strikes[abuser]) < 3:
-                if payload.emoji.name == "❗":
-                    await abuser_dm.send(f'''Your message {report.message.jump_url} with text {report.message.content} has been reported for {report.abuse_type}. 
+                await abuser_dm.send(f'''Your message {report.message.jump_url} with text {report.message.content} has been reported for {report.abuse_type}. 
 Your account has been given a strike for abuse and is currently at {len(globals.user_strikes[abuser])} strikes.
 You would be banned if you reach 3 strikes.
 Please refrain from posting abuse.''')
-                else:
-                    await abuser_dm.send(f'''Your message {report.message.jump_url} with text {report.message.content} has been reported for {report.abuse_type}. 
-Your account has been given a strike for abuse and is currently at {len(globals.user_strikes[abuser])} strikes.
-You would be banned if you reach 3 strikes.
-As a large account, please demonstrate caution before sharing or posting and refrain from posting any abuse''')
                 await reporter_dm.send(f'Your report {report.id} has been resolved. The abuser has been given a strike.')
             else:
                 await abuser_dm.send(f'''Your message {report.message.jump_url} with text {report.message.content} has been reported for {report.abuse_type}.

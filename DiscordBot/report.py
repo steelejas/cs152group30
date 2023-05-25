@@ -5,7 +5,6 @@ from datetime import datetime, timezone
 import pytz
 import uuid
 import globals
-import followers
 
 report_category = {1: "Harassment", 2: "Spam", 3: "Fraud", 4: "Graphic/Violent Content, Gore", 5: "Imminent Danger", 6: "Other"}
 
@@ -300,10 +299,7 @@ or type skip to skip.'''
         report_string += '''Press ⏱️ to place abuser under slow mode.
 Press 🛑 to block abuser for reporter.
 Press 🗑️ to delete the message.\n'''
-        if followers.user_followers[message.author.name] > 5000:
-            report_string += 'Press ‼️ to send strike and warning to abuser.\n'
-        else: 
-            report_string += 'Press ❗ to send strike and warning to abuser.\n'
+        report_string += 'Press ❗ to send strike and warning to abuser.\n'
         report_string += '''Press ❌ to ban abuser.
 Press ❔ to strike reporter for false report. (Only strike if false report is intentional and malicious)
 Press ⬆️ to escalate to a specialized team that handles organized harassment'''
@@ -311,10 +307,7 @@ Press ⬆️ to escalate to a specialized team that handles organized harassment
         await sent_report.add_reaction(emoji="⏱️")
         await sent_report.add_reaction(emoji="🛑")
         await sent_report.add_reaction(emoji="🗑️")
-        if followers.user_followers[message.author.name] > 5000:
-            await sent_report.add_reaction(emoji="‼️")
-        else: 
-            await sent_report.add_reaction(emoji="❗")
+        await sent_report.add_reaction(emoji="❗")
         await sent_report.add_reaction(emoji="❌")
         await sent_report.add_reaction(emoji="❔")
         await sent_report.add_reaction(emoji="⬆️")
