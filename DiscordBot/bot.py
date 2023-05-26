@@ -178,7 +178,14 @@ Your account has been banned for filing malicious false reports.''')
                 else:
                     break
             globals.user_strikes[abuser].append(report)
-            if len(globals.user_strikes[abuser]) < 3:
+            if len(globals.user_strikes[abuser]) == 2 and payload.emoji.name == "‼️":
+                await abuser_dm.send(f'''Your message {report.message.jump_url} with text {report.message.content} has been reported for {report.abuse_type}. 
+Your account has been given a strike for abuse and is currently at {len(globals.user_strikes[abuser])} strikes.
+Since you have a large account, your account has been slowed down for 2 strikes. 
+You would be banned if you reach 3 strikes.
+As a large account, please demonstrate caution before sharing or posting and refrain from posting any abuse''')
+                await reporter_dm.send(f'Your report {report.id} has been resolved. The abuser has been placed on slow mode.')
+            elif len(globals.user_strikes[abuser]) < 3:
                 if payload.emoji.name == "❗":
                     await abuser_dm.send(f'''Your message {report.message.jump_url} with text {report.message.content} has been reported for {report.abuse_type}. 
 Your account has been given a strike for abuse and is currently at {len(globals.user_strikes[abuser])} strikes.
@@ -187,6 +194,7 @@ Please refrain from posting abuse.''')
                 else:
                     await abuser_dm.send(f'''Your message {report.message.jump_url} with text {report.message.content} has been reported for {report.abuse_type}. 
 Your account has been given a strike for abuse and is currently at {len(globals.user_strikes[abuser])} strikes.
+Since you have a large account, your account would be slowed down if you reach 2 strikes. 
 You would be banned if you reach 3 strikes.
 As a large account, please demonstrate caution before sharing or posting and refrain from posting any abuse''')
                 await reporter_dm.send(f'Your report {report.id} has been resolved. The abuser has been given a strike.')
