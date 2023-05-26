@@ -8,6 +8,7 @@ import re
 import requests
 from report import Report
 import pdb
+import globals
 
 # Set up logging to the console
 logger = logging.getLogger('discord')
@@ -33,6 +34,7 @@ class ModBot(discord.Client):
         super().__init__(command_prefix='.', intents=intents)
         self.group_num = None
         self.mod_channels = {} # Map from guild to the mod channel id for that guild
+        self.auto_mod_channels = {} # Map from guild to the automatic forwarding mod channel id for that guild
         self.reports = {} # Map from user IDs to the state of their report
 
     async def on_ready(self):
@@ -51,9 +53,10 @@ class ModBot(discord.Client):
         # Find the mod channel in each guild that this bot should report to
         for guild in self.guilds:
             for channel in guild.text_channels:
-                if channel.name == f'group-{self.group_num}-mod':
+                if channel.name == f'group-{self.group_num}-human-mod':
                     self.mod_channels[guild.id] = channel
-        
+                elif channel.name == f'group-{self.group_num}-mod':
+                    self.auto_mod_channels[guild.id] = channel
 
     async def on_message(self, message):
         '''
@@ -104,12 +107,105 @@ class ModBot(discord.Client):
             return
 
         # Forward the message to the mod channel
-        mod_channel = self.mod_channels[message.guild.id]
+        mod_channel = self.auto_mod_channels[message.guild.id]
         await mod_channel.send(f'Forwarded message:\n{message.author.name}: "{message.content}"')
         scores = self.eval_text(message.content)
         await mod_channel.send(self.code_format(scores))
 
-    
+    async def on_raw_reaction_add(self, payload):
+        if not payload.channel_id == self.mod_channels[payload.guild_id].id:
+            return  
+        if not payload.message_id in globals.report_message_to_id.keys():
+            return
+        if not payload.emoji.name in ["⏱️", "🛑", "🗑️", "❗", "‼️", "❌", "❔", "⬆️"]:
+            return
+        if payload.member.id == self.user.id:
+            return
+        report_id = globals.report_message_to_id[payload.message_id]
+        report = globals.reports[report_id]
+        reporter = report.reporter
+        abuser = report.message.author
+        abuser_dm = abuser.dm_channel if abuser.dm_channel else await abuser.create_dm()
+        reporter_dm = reporter.dm_channel if reporter.dm_channel else await reporter.create_dm()
+        if payload.emoji.name == "⏱️":
+            await abuser_dm.send(f'''Your message {report.message.jump_url} with text {report.message.content} has been reported for {report.abuse_type}. 
+As such, your account would be placed under slow mode for the next 72 hours.''')
+            await reporter_dm.send(f'Your report {report.id} has been resolved. The abuser has been placed under slow mode.')
+        elif payload.emoji.name == "🛑":
+            await reporter_dm.send(f'Your report {report.id} has been resolved. All messages from the abuser will now be blocked.')
+        elif payload.emoji.name == "🗑️":
+            await report.message.delete()
+            await abuser_dm.send(f'''Your message {report.message.jump_url} with text {report.message.content} has been reported for {report.abuse_type}. 
+As such, your message has been deleted.''')
+            await reporter_dm.send(f'Your report {report.id} has been resolved. The message has been deleted.')
+        elif payload.emoji.name == "❌":
+            await abuser_dm.send(f'''Your message {report.message.jump_url} with text {report.message.content} has been reported for {report.abuse_type}.
+Your account has been banned for abuse.''')
+            await reporter_dm.send(f'Your report {report.id} has been resolved. The abuser has been banned.')
+        elif payload.emoji.name == "⬆️":
+            await reporter_dm.send(f'Your report {report.id} has been escalated to a specialized team.')
+        elif payload.emoji.name == "❔":
+            if reporter not in globals.user_false_report_strikes:
+                globals.user_false_report_strikes[reporter] = list()
+            while True:
+                if len(globals.user_false_report_strikes[reporter]) == 0:
+                    break
+                strike = globals.user_false_report_strikes[reporter][0]
+                timediff = report.report_created_time - strike.report_created_time
+                if timediff.days >= 30:
+                    globals.user_false_report_strikes[reporter].pop(0) 
+                else:
+                    break
+            globals.user_false_report_strikes[reporter].append(report)
+            if len(globals.user_false_report_strikes[reporter]) < 3:
+                await reporter_dm.send(f'''Your report {report.id} has been resolved and classified as a malicious false report.
+You have been given a strike and is currently at {len(globals.user_false_report_strikes[reporter])} strikes.
+You would be banned if you reach 3 strikes. Please refrain from filing malicious false reports.''')
+            else:
+                await reporter_dm.send(f'''Your report {report.id} has been resolved and classified as a malicious false report.
+You have reached three strikes for false reports. 
+Your account has been banned for filing malicious false reports.''')
+        elif payload.emoji.name == "❗" or payload.emoji.name == "‼️":
+            if abuser not in globals.user_strikes:
+                globals.user_strikes[abuser] = list()
+            while True:
+                if len(globals.user_strikes[abuser]) == 0:
+                    break
+                strike = globals.user_strikes[abuser][0]
+                timediff = report.report_created_time - strike.report_created_time
+                if timediff.days >= 365:
+                    globals.user_strikes[abuser].pop(0) 
+                else:
+                    break
+            globals.user_strikes[abuser].append(report)
+            if len(globals.user_strikes[abuser]) == 2 and payload.emoji.name == "‼️":
+                await abuser_dm.send(f'''Your message {report.message.jump_url} with text {report.message.content} has been reported for {report.abuse_type}. 
+Your account has been given a strike for abuse and is currently at {len(globals.user_strikes[abuser])} strikes.
+Since you have a large account, your account has been slowed down for 2 strikes. 
+You would be banned if you reach 3 strikes.
+As a large account, please demonstrate caution before sharing or posting and refrain from posting any abuse''')
+                await reporter_dm.send(f'Your report {report.id} has been resolved. The abuser has been placed on slow mode.')
+            elif len(globals.user_strikes[abuser]) < 3:
+                if payload.emoji.name == "❗":
+                    await abuser_dm.send(f'''Your message {report.message.jump_url} with text {report.message.content} has been reported for {report.abuse_type}. 
+Your account has been given a strike for abuse and is currently at {len(globals.user_strikes[abuser])} strikes.
+You would be banned if you reach 3 strikes.
+Please refrain from posting abuse.''')
+                else:
+                    await abuser_dm.send(f'''Your message {report.message.jump_url} with text {report.message.content} has been reported for {report.abuse_type}. 
+Your account has been given a strike for abuse and is currently at {len(globals.user_strikes[abuser])} strikes.
+Since you have a large account, your account would be slowed down if you reach 2 strikes. 
+You would be banned if you reach 3 strikes.
+As a large account, please demonstrate caution before sharing or posting and refrain from posting any abuse''')
+                await reporter_dm.send(f'Your report {report.id} has been resolved. The abuser has been given a strike.')
+            else:
+                await abuser_dm.send(f'''Your message {report.message.jump_url} with text {report.message.content} has been reported for {report.abuse_type}.
+You have reached three strikes for abuses.
+Your account has been banned.''')
+                await reporter_dm.send(f'Your report {report.id} has been resolved. The abuser has been banned.')
+            
+
+
     def eval_text(self, message):
         ''''
         TODO: Once you know how you want to evaluate messages in your channel, 
