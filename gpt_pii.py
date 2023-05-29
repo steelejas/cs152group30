@@ -7,9 +7,7 @@ Adapted from https://github.com/openai/chatgpt-retrieval-plugin/blob/main/servic
 import openai
 
 
-# OPENAI_API_KEY = "REPLACE_WITH_API_KEY"
-OPENAI_API_KEY = "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"
-
+OPENAI_API_KEY = "REPLACE_WITH_API_KEY"
 
 class pii_detector:
     def __init__(self):
