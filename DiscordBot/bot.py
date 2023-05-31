@@ -9,6 +9,7 @@ import requests
 from report import Report
 import pdb
 import globals
+import badwordlist
 
 # Set up logging to the console
 logger = logging.getLogger('discord')
@@ -108,9 +109,14 @@ class ModBot(discord.Client):
 
         # Forward the message to the mod channel
         mod_channel = self.auto_mod_channels[message.guild.id]
+        print(message.author.name)
+        print(message.content)
         await mod_channel.send(f'Forwarded message:\n{message.author.name}: "{message.content}"')
+        print(message.content)
         scores = self.eval_text(message.content)
-        await mod_channel.send(self.code_format(scores))
+        await mod_channel.send(self.code_format(message.content, scores))
+        if scores == 1:
+            await message.delete()
 
     async def on_raw_reaction_add(self, payload):
         if not payload.channel_id == self.mod_channels[payload.guild_id].id:
@@ -211,16 +217,21 @@ Your account has been banned.''')
         TODO: Once you know how you want to evaluate messages in your channel, 
         insert your code here! This will primarily be used in Milestone 3. 
         '''
-        return message
+        print(message)
+        score = 0
+        words = message.split()
+        if set(words).intersection(badwordlist.bad_word_list):
+            score = 1
+        return score
 
     
-    def code_format(self, text):
+    def code_format(self, text, score):
         ''''
         TODO: Once you know how you want to show that a message has been 
         evaluated, insert your code here for formatting the string to be 
         shown in the mod channel. 
         '''
-        return "Evaluated: '" + text+ "'"
+        return "Evaluated: '" + text+ "': " + str(score)
 
 
 client = ModBot()
