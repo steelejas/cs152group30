@@ -31,7 +31,10 @@ with open(token_path) as f:
 class ModBot(discord.Client):
     def __init__(self): 
         intents = discord.Intents.default()
-        intents.messages = True
+        try: 
+            intents.message_content = True
+        except: 
+            intents.messages = True
         super().__init__(command_prefix='.', intents=intents)
         self.group_num = None
         self.mod_channels = {} # Map from guild to the mod channel id for that guild
@@ -109,10 +112,7 @@ class ModBot(discord.Client):
 
         # Forward the message to the mod channel
         mod_channel = self.auto_mod_channels[message.guild.id]
-        print(message.author.name)
-        print(message.content)
         await mod_channel.send(f'Forwarded message:\n{message.author.name}: "{message.content}"')
-        print(message.content)
         scores = self.eval_text(message.content)
         await mod_channel.send(self.code_format(message.content, scores))
         if scores == 1:
@@ -217,10 +217,10 @@ Your account has been banned.''')
         TODO: Once you know how you want to evaluate messages in your channel, 
         insert your code here! This will primarily be used in Milestone 3. 
         '''
-        print(message)
         score = 0
         words = message.split()
-        if set(words).intersection(badwordlist.bad_word_list):
+        bad_word_list = [x.lower() for x in badwordlist.bad_word_list]
+        if set(words).intersection(bad_word_list):
             score = 1
         return score
 
