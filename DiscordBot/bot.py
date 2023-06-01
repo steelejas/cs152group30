@@ -10,6 +10,7 @@ from report import Report
 import pdb
 import globals
 import badwordlist
+from blocklist import BlocklistInteraction, blocklist, blockregex
 
 # Set up logging to the console
 logger = logging.getLogger('discord')
@@ -40,6 +41,7 @@ class ModBot(discord.Client):
         self.mod_channels = {} # Map from guild to the mod channel id for that guild
         self.auto_mod_channels = {} # Map from guild to the automatic forwarding mod channel id for that guild
         self.reports = {} # Map from user IDs to the state of their report
+        self.blocklist_interaction = {} # Map from user ID to current interaction with blocklist
 
     async def on_ready(self):
         print(f'{self.user.name} has connected to Discord! It is these guilds:')
@@ -82,28 +84,58 @@ class ModBot(discord.Client):
         if message.content == Report.HELP_KEYWORD:
             reply =  "Use the `report` command to begin the reporting process.\n"
             reply += "Use the `cancel` command to cancel the report process.\n"
+            reply += "Use the `blocklist` command to see blocklist, blocked regex, and add or remove words or regex from the blocklist.\n"
             await message.channel.send(reply)
             return
 
         author_id = message.author.id
         responses = []
 
-        # Only respond to messages if they're part of a reporting flow
-        if author_id not in self.reports and not message.content.startswith(Report.START_KEYWORD):
+        if author_id in self.reports:
+            # Let the report class handle this message; forward all the messages it returns to uss
+            responses = await self.reports[author_id].handle_message(message)
+            for r in responses:
+                await message.channel.send(r)
+
+            # If the report is complete or cancelled, remove it from our map
+            if self.reports[author_id].report_complete():
+                self.reports.pop(author_id)
+        
+        elif author_id in self.blocklist_interaction:
+            # Let the report class handle this message; forward all the messages it returns to uss
+            responses = await self.blocklist_interaction[author_id].handle_message(message)
+            for r in responses:
+                await message.channel.send(r)
+
+            # If the report is complete or cancelled, remove it from our map
+            if self.blocklist_interaction[author_id].blocklist_complete():
+                self.blocklist_interaction.pop(author_id)
+
+        elif message.content.startswith(Report.START_KEYWORD):
+            self.reports[author_id] = Report(self)
+            # Let the report class handle this message; forward all the messages it returns to uss
+            responses = await self.reports[author_id].handle_message(message)
+            for r in responses:
+                await message.channel.send(r)
+
+            # If the report is complete or cancelled, remove it from our map
+            if self.reports[author_id].report_complete():
+                self.reports.pop(author_id)
+        
+        elif message.content.startswith(BlocklistInteraction.START_KEYWORD):
+            self.blocklist_interaction[author_id] = BlocklistInteraction(self)
+            # Let the report class handle this message; forward all the messages it returns to uss
+            responses = await self.blocklist_interaction[author_id].handle_message(message)
+            for r in responses:
+                await message.channel.send(r)
+
+            # If the report is complete or cancelled, remove it from our map
+            if self.blocklist_interaction[author_id].blocklist_complete():
+                self.blocklist_interaction.pop(author_id)
+
+        else:
             return
 
-        # If we don't currently have an active report for this user, add one
-        if author_id not in self.reports:
-            self.reports[author_id] = Report(self)
-
-        # Let the report class handle this message; forward all the messages it returns to uss
-        responses = await self.reports[author_id].handle_message(message)
-        for r in responses:
-            await message.channel.send(r)
-
-        # If the report is complete or cancelled, remove it from our map
-        if self.reports[author_id].report_complete():
-            self.reports.pop(author_id)
 
     async def handle_channel_message(self, message):
         # Only handle messages sent in the "group-#" channel
@@ -113,9 +145,9 @@ class ModBot(discord.Client):
         # Forward the message to the mod channel
         mod_channel = self.auto_mod_channels[message.guild.id]
         await mod_channel.send(f'Forwarded message:\n{message.author.name}: "{message.content}"')
-        scores = self.eval_text(message.content)
-        await mod_channel.send(self.code_format(message.content, scores))
-        if scores == 1:
+        score, reason = self.eval_text(message.content)
+        await mod_channel.send(self.code_format(message.content, score, reason))
+        if score == 1:
             await message.delete()
 
     async def on_raw_reaction_add(self, payload):
@@ -218,20 +250,33 @@ Your account has been banned.''')
         insert your code here! This will primarily be used in Milestone 3. 
         '''
         score = 0
-        words = message.split()
-        bad_word_list = [x.lower() for x in badwordlist.bad_word_list]
-        if set(words).intersection(bad_word_list):
-            score = 1
-        return score
+        reason = "N/A"
+        lowercase_message = message.lower()
+        for word in blocklist:
+            if word in lowercase_message:
+                score = 1
+                start_pos = lowercase_message.find(word)
+                end_pos = start_pos + len(word)
+                reason = f"contains blocked word or expression: `{word}` at " + \
+                f"\"{message[0: start_pos]}`{message[start_pos: end_pos]}`{message[end_pos: len(message)]}\""
+                return score, reason
+        for regex in blockregex:
+            if re.search(regex, message):
+                start_pos = re.search(regex, message).span()[0]
+                end_pos = re.search(regex, message).span()[1]
+                score = 1
+                reason = f"contains blocked regex `{regex}` at " + \
+                f"\"{message[0: start_pos]}`{message[start_pos: end_pos]}`{message[end_pos: len(message)]}\""
+                return score, reason
 
     
-    def code_format(self, text, score):
+    def code_format(self, text, score, reason):
         ''''
         TODO: Once you know how you want to show that a message has been 
         evaluated, insert your code here for formatting the string to be 
         shown in the mod channel. 
         '''
-        return "Evaluated: '" + text+ "': " + str(score)
+        return "Evaluated: '" + text+ "': " + str(score) + ", reason: " + str(reason)
 
 
 client = ModBot()
