@@ -11,6 +11,7 @@ import pdb
 import globals
 import badwordlist
 from blocklist import BlocklistInteraction, blocklist, blockregex
+from googleapiclient import discovery
 
 # Set up logging to the console
 logger = logging.getLogger('discord')
@@ -27,7 +28,16 @@ with open(token_path) as f:
     # If you get an error here, it means your token is formatted incorrectly. Did you put it in quotes?
     tokens = json.load(f)
     discord_token = tokens['discord']
+    perspective_token=tokens['perspective']
 
+perspective_client = discovery.build(
+  "commentanalyzer",
+  "v1alpha1",
+  developerKey=perspective_token,
+  discoveryServiceUrl="https://commentanalyzer.googleapis.com/$discovery/rest?version=v1alpha1",
+  static_discovery=False,
+)
+perspective_attributes = {"TOXICITY":0.8,"SPAM":0.7,"IDENTITY_ATTACK":0.8,"INSULT":0.8,"THREAT":0.8}
 
 class ModBot(discord.Client):
     def __init__(self): 
@@ -268,6 +278,19 @@ Your account has been banned.''')
                 reason = f"contains blocked regex `{regex}` at " + \
                 f"\"{message[0: start_pos]}`{message[start_pos: end_pos]}`{message[end_pos: len(message)]}\""
                 return score, reason
+
+        # persepctive analysis
+        analyze_request = {
+          'comment': { 'text': lowercase_message },
+          'requestedAttributes': {'TOXICITY': {}, 'SPAM':{},'IDENTITY_ATTACK':{},'INSULT':{},'THREAT':{}}
+        }
+        response = perspective_client.comments().analyze(body=analyze_request).execute()
+        for attribute in perspective_attributes:
+            if (response["attributeScores"][attribute]["summaryScore"]["value"] > perspective_attributes[attribute]):
+                score=1
+                reason=f"perspective rated message having high `{attribute}` value \n"
+                return score,reason 
+
 
     
     def code_format(self, text, score, reason):
