@@ -308,16 +308,16 @@ Press 🗑️ to delete the message.\n'''
 Press ❔ to strike reporter for false report. (Only strike if false report is intentional and malicious)
 Press ⬆️ to escalate to a specialized team that handles organized harassment'''
         sent_report = await mod_channel.send(report_string)
-        await sent_report.add_reaction(emoji="⏱️")
-        await sent_report.add_reaction(emoji="🛑")
-        await sent_report.add_reaction(emoji="🗑️")
+        await sent_report.add_reaction("⏱️")
+        await sent_report.add_reaction("🛑")
+        await sent_report.add_reaction("🗑️")
         if followers.user_followers[message.author.name] > 5000:
-            await sent_report.add_reaction(emoji="‼️")
+            await sent_report.add_reaction("‼️")
         else: 
-            await sent_report.add_reaction(emoji="❗")
-        await sent_report.add_reaction(emoji="❌")
-        await sent_report.add_reaction(emoji="❔")
-        await sent_report.add_reaction(emoji="⬆️")
+            await sent_report.add_reaction("❗")
+        await sent_report.add_reaction("❌")
+        await sent_report.add_reaction("❔")
+        await sent_report.add_reaction("⬆️")
 
         globals.report_message_to_id[sent_report.id] = report.id
 
