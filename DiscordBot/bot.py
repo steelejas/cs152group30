@@ -9,8 +9,9 @@ import requests
 from report import Report
 import pdb
 import globals
-import badwordlist
+#import badwordlist
 from blocklist import BlocklistInteraction, blocklist, blockregex
+from unidecode import unidecode
 from googleapiclient import discovery
 
 # Set up logging to the console
@@ -261,7 +262,9 @@ Your account has been banned.''')
         '''
         score = 0
         reason = "N/A"
-        lowercase_message = message.lower()
+        message = message.strip()
+        unidecode_message = unidecode(message, errors='preserve')
+        lowercase_message = unidecode_message.lower()
         for word in blocklist:
             if word in lowercase_message:
                 score = 1
@@ -271,15 +274,15 @@ Your account has been banned.''')
                 f"\"{message[0: start_pos]}`{message[start_pos: end_pos]}`{message[end_pos: len(message)]}\""
                 return score, reason
         for regex in blockregex:
-            if re.search(regex, message):
-                start_pos = re.search(regex, message).span()[0]
-                end_pos = re.search(regex, message).span()[1]
+            if re.search(regex, unidecode_message):
+                start_pos = re.search(regex, unidecode_message).span()[0]
+                end_pos = re.search(regex, unidecode_message).span()[1]
                 score = 1
                 reason = f"contains blocked regex `{regex}` at " + \
                 f"\"{message[0: start_pos]}`{message[start_pos: end_pos]}`{message[end_pos: len(message)]}\""
                 return score, reason
 
-        # persepctive analysis
+        # perspective analysis
         analyze_request = {
           'comment': { 'text': lowercase_message },
           'requestedAttributes': {'TOXICITY': {}, 'SPAM':{},'IDENTITY_ATTACK':{},'INSULT':{},'THREAT':{}}
