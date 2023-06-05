@@ -1,7 +1,6 @@
 """
-Checks for the presence of PII in a text using gpt-3.5-turbo.
+Checks text for doxxing that describes the home adress of someone gpt-3.5-turbo.
 Adapted from https://github.com/openai/chatgpt-retrieval-plugin/blob/main/services/pii_detection.py
-
 """
 
 import openai
@@ -25,14 +24,12 @@ class pii_detector:
                 {
                     "role": "system",
                     "content": f"""
-                    You can only respond with the word "True" or "False", where your answer indicates whether the text in the user's message contains PII.
+                    You can only respond with the word "True" or "False", where your answer indicates whether the text describes someone else's home street adress.
                     Do not explain your answer, and do not use punctuation.
-                    Your task is to identify whether the text extracted from your company files
-                    contains sensitive PII information that should not be shared with the broader company. Here are some things to look out for:
-                    - An email address that identifies a specific person in either the local-part or the domain
-                    - Descriptions of where a person lives or works
-                    - The postal address of a private residence (must include at least a street name)
-                    - The postal address of a public place (must include either a street name or business name)
+                    Your task is to identify whether the text from social media posts
+                    contains a street address of someone who is not the author of the post. Here are some things to look out for:
+                    - A street address
+                    - A description of the house or apartment someone lives in
                     """,
                 },
                 {"role": "user", "content": post},
