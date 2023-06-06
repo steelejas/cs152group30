@@ -13,7 +13,7 @@ target = {1: "Against Myself", 2: "Against Someone Else", 3: "Against a group of
 
 imminent_danger_category = {1: "Credible threat of violence", 2: "Self-harm or suicidal intent", 3: "Doxxing"}
 
-harassment_category = {1: "Organizing of Harassment", 2: "Impersonation", 3: "Hate Speech", 4: "Offensive content", 5: "Sexual Harassment", 6: "Doxxing", 7: "Spam"}
+harassment_category = {1: "Organizing of Harassment", 2: "Misinformation/Impersonation", 3: "Hate Speech", 4: "Offensive content", 5: "Sexual Harassment", 6: "Doxxing", 7: "Spam"}
 
 class reported_message:
     def __init__(self, reporter, message):
