@@ -6,6 +6,7 @@ import pytz
 import uuid
 import globals
 import followers
+import random
 
 report_category = {1: "Harassment", 2: "Spam", 3: "Fraud", 4: "Graphic/Violent Content, Gore", 5: "Imminent Danger", 6: "Other"}
 
@@ -278,6 +279,9 @@ or type skip to skip.'''
         # Set state to end
         self.state = State.REPORT_COMPLETE
         return_string = list()
+        # randomize large and small accounts
+        if message.author.name not in followers.user_followers:
+            followers.user_followers[message.author.name] = random.randint(1, 10000)
         # Store report in list
         globals.reports[self.report.id] = self.report
         return_string.append(await self.send_reports(self.report))
@@ -297,6 +301,9 @@ or type skip to skip.'''
                     new_report.set_safety()
                 if len(self.report.block_user) > 0:
                     new_report.set_block_user(message.author.name)
+                # randomize large and small accounts
+                if message.author.name not in followers.user_followers:
+                    followers.user_followers[message.author.name] = random.randint(1, 10000)
                 globals.reports[new_report.id] = new_report
                 return_string.append(await self.send_reports(new_report))
         return return_string
