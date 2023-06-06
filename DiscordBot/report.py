@@ -24,6 +24,12 @@ class reported_message:
         self.report_created_time = datetime.now(timezone.utc)
         self.safety_mode = False
         self.block_user = set()
+        self.false_report_strike = False
+        self.slow_mode = False
+        self.deleted = False
+        self.strike = False
+        self.escalation = False
+        self.banned = False
     
     def set_type(self, abuse_type):
         self.abuse_type = abuse_type
@@ -48,6 +54,24 @@ class reported_message:
     
     def set_block_user(self, blocked_user):
         self.block_user.add(blocked_user)
+    
+    def set_false_report_strike(self):
+        self.false_report_strike = True
+
+    def set_slow_mode(self):
+        self.slow_mode = True
+
+    def set_deleted(self):
+        self.deleted = True
+
+    def set_banned(self):
+        self.banned = True
+
+    def set_strike(self):
+        self.strike = True
+
+    def set_escalation(self):
+        self.escalation = True
 
     
 class State(Enum):

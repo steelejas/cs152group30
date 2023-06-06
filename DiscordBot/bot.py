@@ -13,6 +13,9 @@ import globals
 from blocklist import BlocklistInteraction, blocklist, blockregex
 from unidecode import unidecode
 from googleapiclient import discovery
+from gpt_pii import check_post_for_pii
+
+
 
 # Set up logging to the console
 logger = logging.getLogger('discord')
@@ -38,7 +41,7 @@ perspective_client = discovery.build(
   discoveryServiceUrl="https://commentanalyzer.googleapis.com/$discovery/rest?version=v1alpha1",
   static_discovery=False,
 )
-perspective_attributes = {"TOXICITY":0.8,"SPAM":0.7,"IDENTITY_ATTACK":0.8,"INSULT":0.8,"THREAT":0.8}
+perspective_attributes = {"TOXICITY":0.5,"SPAM":0.7,"IDENTITY_ATTACK":0.5,"INSULT":0.5,"THREAT":0.8}
 
 class ModBot(discord.Client):
     def __init__(self): 
@@ -95,6 +98,8 @@ class ModBot(discord.Client):
         if message.content == Report.HELP_KEYWORD:
             reply =  "Use the `report` command to begin the reporting process.\n"
             reply += "Use the `cancel` command to cancel the report process.\n"
+            reply += "Use the `list` command to see past reports filed.\n"
+            reply += "Use the `search \{report_id\}` command to see status of report with corresponding id.\n"
             reply += "Use the `blocklist` command to see blocklist, blocked regex, and add or remove words or regex from the blocklist.\n"
             await message.channel.send(reply)
             return
@@ -144,6 +149,45 @@ class ModBot(discord.Client):
             if self.blocklist_interaction[author_id].blocklist_complete():
                 self.blocklist_interaction.pop(author_id)
 
+        elif message.content.startsWith("list"):
+            for id, report in globals.reports.items():
+                retString = 'Reports filed:\n'
+                if report.reporter == message.author:
+                    retString += f'{id}\n'
+                retString += '\n'
+            await message.channel.send(retString)
+
+        elif message.content.startsWith("search"):
+            if message.content.strip().split(' ') != 2:
+                await message.channel.send("Please search for report with command `search \{report_id\}`")
+                return
+            id = message.content.strip().split(' ')[1]
+            if id not in globals.reports or globals.reports[id].reporter != message.author:
+                await message.channel.send("Invalid ID. Please search for a report id that you have filed.")
+                return
+            report = globals.reports[id]
+            report_string = f'''Report {report.id} at time {report.report_created_time.astimezone()}:
+\tReported message:
+\t{message.author.name}: "{message.content}"
+\tLink:{message.jump_url}
+\tReporter: {report.reporter.name}
+\tAbuse Type: {self.report.abuse_type}\n'''
+            if report.abuse_type == "Other":
+                report_string += f'''\t\tAbuse Type Details: {report.other_details}\n'''  
+            elif report.abuse_type == "Harassment":
+                report_string += f'''\t\tHarassment Type: {report.harassment_type}\n'''
+                report_string += f'''\t\tMultiple Harassers: {report.multiple_harasser}\n'''
+            elif report.abuse_type == "Imminent Danger":
+                report_string += f'\t\tImminent Danger Type: {report.imminent_danger}\n'
+            report_string += f'\tHas reporter turned on safety mode: {report.safety_mode}\n'
+            report_string += f'\tIs this a false report: {report.false_report_strike}\n'
+            report_string += f'\tHas the sender been placed on slow mode: {report.slow_mode}\n'
+            report_string += f'\tHas the sender been blocked: {report.message.author.name in report.block_user}\n'
+            report_string += f'\tHas the message been deleted: {report.deleted}\n'
+            report_string += f'\tHas the message sender been given a strike: {report.strike}\n'
+            report_string += f'\tHas the message been escalated: {report.escalation}\n'
+            await message.channel.send(report_string)
+
         else:
             return
 
@@ -177,21 +221,26 @@ class ModBot(discord.Client):
         abuser_dm = abuser.dm_channel if abuser.dm_channel else await abuser.create_dm()
         reporter_dm = reporter.dm_channel if reporter.dm_channel else await reporter.create_dm()
         if payload.emoji.name == "⏱️":
+            report.set_slow_mode()
             await abuser_dm.send(f'''Your message {report.message.jump_url} with text {report.message.content} has been reported for {report.abuse_type}. 
 As such, your account would be placed under slow mode for the next 72 hours.''')
             await reporter_dm.send(f'Your report {report.id} has been resolved. The abuser has been placed under slow mode.')
         elif payload.emoji.name == "🛑":
+            report.set_block_user(abuser.name)
             await reporter_dm.send(f'Your report {report.id} has been resolved. All messages from the abuser will now be blocked.')
         elif payload.emoji.name == "🗑️":
             await report.message.delete()
+            report.set_deleted()
             await abuser_dm.send(f'''Your message {report.message.jump_url} with text {report.message.content} has been reported for {report.abuse_type}. 
 As such, your message has been deleted.''')
             await reporter_dm.send(f'Your report {report.id} has been resolved. The message has been deleted.')
         elif payload.emoji.name == "❌":
+            report.set_banned()
             await abuser_dm.send(f'''Your message {report.message.jump_url} with text {report.message.content} has been reported for {report.abuse_type}.
 Your account has been banned for abuse.''')
             await reporter_dm.send(f'Your report {report.id} has been resolved. The abuser has been banned.')
         elif payload.emoji.name == "⬆️":
+            report.set_escalation()
             await reporter_dm.send(f'Your report {report.id} has been escalated to a specialized team.')
         elif payload.emoji.name == "❔":
             if reporter not in globals.user_false_report_strikes:
@@ -207,6 +256,7 @@ Your account has been banned for abuse.''')
                     break
             globals.user_false_report_strikes[reporter].append(report)
             if len(globals.user_false_report_strikes[reporter]) < 3:
+                report.set_false_report_strike()
                 await reporter_dm.send(f'''Your report {report.id} has been resolved and classified as a malicious false report.
 You have been given a strike and is currently at {len(globals.user_false_report_strikes[reporter])} strikes.
 You would be banned if you reach 3 strikes. Please refrain from filing malicious false reports.''')
@@ -227,6 +277,7 @@ Your account has been banned for filing malicious false reports.''')
                 else:
                     break
             globals.user_strikes[abuser].append(report)
+            report.set_strike()
             if len(globals.user_strikes[abuser]) == 2 and payload.emoji.name == "‼️":
                 await abuser_dm.send(f'''Your message {report.message.jump_url} with text {report.message.content} has been reported for {report.abuse_type}. 
 Your account has been given a strike for abuse and is currently at {len(globals.user_strikes[abuser])} strikes.
@@ -248,6 +299,7 @@ You would be banned if you reach 3 strikes.
 As a large account, please demonstrate caution before sharing or posting and refrain from posting any abuse''')
                 await reporter_dm.send(f'Your report {report.id} has been resolved. The abuser has been given a strike.')
             else:
+                report.set_banned()
                 await abuser_dm.send(f'''Your message {report.message.jump_url} with text {report.message.content} has been reported for {report.abuse_type}.
 You have reached three strikes for abuses.
 Your account has been banned.''')
@@ -281,6 +333,10 @@ Your account has been banned.''')
                 reason = f"contains blocked regex `{regex}` at " + \
                 f"\"{message[0: start_pos]}`{message[start_pos: end_pos]}`{message[end_pos: len(message)]}\""
                 return score, reason
+        if check_post_for_pii(unidecode_message):
+            score = 1
+            reason = "contains pii: home street"
+            return score, reason
 
         # perspective analysis
         analyze_request = {
