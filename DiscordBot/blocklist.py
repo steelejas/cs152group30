@@ -1,9 +1,9 @@
 from enum import Enum, auto
-from badwordlist import bad_word_list
+from badwordlist import bad_word_list, streamer_spam_list
 
 blocklist = {"fuck"}
 
-blocklist = bad_word_list
+blocklist = streamer_spam_list
 
 blockregex = set()
     

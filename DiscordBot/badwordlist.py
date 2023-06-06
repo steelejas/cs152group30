@@ -1,3 +1,19 @@
+#source: https://github.com/dakkafex/streamer-spam-blacklist/blob/main/nightbot/slurs
+
+streamer_spam_list = {
+    "fag",
+    "faggot",
+    "nigger",
+    "negro",
+    "dyke",
+    "chink",
+    "coon",
+    "trannie",
+    "tranny",
+    "retard",
+    "sand monkey"
+}
+
 #source: https://www.reddit.com/r/NewTubers/comments/nm09bz/list_of_500_words_to_put_in_your_banned_words_list/
 #https://docs.google.com/document/d/1zEZYFTFNZE75uEA7cR149ab5yO1UbgATrJh33-PB4ZY/edit
 
