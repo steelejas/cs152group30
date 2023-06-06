@@ -29,7 +29,7 @@ def checkpost_perspective(post, attributes):
         response = client.comments().analyze(body=analyze_request).execute()
         for attribute in attributes:
             if (response["attributeScores"][attribute]["summaryScore"]["value"] > attributes[attribute]):
-            return True, attribute
+                return True, attribute
         return False, None
     except: 
         return False, None
