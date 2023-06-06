@@ -1,5 +1,5 @@
 discord.py
 uuid
 requests
-googleapiclient
+google-api-python-client
 openai
