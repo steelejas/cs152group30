@@ -2,7 +2,6 @@ from enum import Enum, auto
 import discord
 import re
 from datetime import datetime, timezone
-import pytz
 import uuid
 import globals
 import followers

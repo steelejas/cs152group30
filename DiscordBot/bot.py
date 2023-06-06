@@ -12,7 +12,6 @@ import globals
 #import badwordlist
 from blocklist import BlocklistInteraction, blocklist, blockregex
 from unidecode import unidecode
-from googleapiclient import discovery
 from gpt_pii import check_post_for_pii
 from datetime import datetime, timezone
 from perspective_api import checkpost_perspective
@@ -34,15 +33,7 @@ with open(token_path) as f:
     # If you get an error here, it means your token is formatted incorrectly. Did you put it in quotes?
     tokens = json.load(f)
     discord_token = tokens['discord']
-    perspective_token=tokens['perspective']
 
-perspective_client = discovery.build(
-  "commentanalyzer",
-  "v1alpha1",
-  developerKey=perspective_token,
-  discoveryServiceUrl="https://commentanalyzer.googleapis.com/$discovery/rest?version=v1alpha1",
-  static_discovery=False,
-)
 perspective_attributes = {"TOXICITY":0.5,"SPAM":0.7,"IDENTITY_ATTACK":0.5,"INSULT":0.5,"THREAT":0.8}
 
 class ModBot(discord.Client):
