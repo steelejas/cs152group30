@@ -242,6 +242,9 @@ class ModBot(discord.Client):
         await mod_channel.send(self.code_format(message.content, score, reason))
         if score == 1:
             await message.delete()
+            abuser = message.author
+            abuser_dm = abuser.dm_channel if abuser.dm_channel else await abuser.create_dm()
+            await abuser_dm.send(f'''Your message {message.jump_url} with text {message.content} has been deleted for reason: {reason}.''')
 
     async def on_raw_reaction_add(self, payload):
         if not payload.channel_id == self.mod_channels[payload.guild_id].id:
