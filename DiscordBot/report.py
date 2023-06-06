@@ -159,7 +159,7 @@ or say `cancel` to cancel.''']
                 self.state = State.HARASSMENT_TYPE
                 return ['''Please select the type of harassment by entering its number.
 1. Organizing of Harassment
-2. Impersonation
+2. Misinformation/Impersonation
 3. Hate Speech
 4. Offensive content
 5. Sexual Harassment
