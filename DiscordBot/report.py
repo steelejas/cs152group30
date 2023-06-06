@@ -364,10 +364,9 @@ This may include removing the content.'''
         return self.state == State.REPORT_COMPLETE
     
 
-async def send_autoreport(client, report):
+async def send_autoreport(mod_channel, report):
     # Forward the report to the mod channel
     message = report.message
-    mod_channel = client.mod_channels[message.guild.id]
     report_string = f'''Report {report.id} at time {report.report_created_time.astimezone()}:
 \tReported message:
 \t{message.author.name}: "{message.content}"
@@ -384,7 +383,6 @@ async def send_autoreport(client, report):
     report_string += f'\tHas reporter turned on safety mode: {report.safety_mode}\n'
     report_string += f'\tHas reporter blocked message sender: {report.message.author.name in report.block_user}\n'
     report_string += '''Press ⏱️ to place abuser under slow mode.
-Press 🛑 to block abuser for reporter.
 Press 🗑️ to delete the message.\n'''
     if followers.user_followers[message.author.name] > 5000:
         report_string += 'Press ‼️ to send strike and warning to abuser.\n'
@@ -394,7 +392,6 @@ Press 🗑️ to delete the message.\n'''
 Press ⬆️ to escalate to a specialized team that handles organized harassment'''
     sent_report = await mod_channel.send(report_string)
     await sent_report.add_reaction("⏱️")
-    await sent_report.add_reaction("🛑")
     await sent_report.add_reaction("🗑️")
     if followers.user_followers[message.author.name] > 5000:
         await sent_report.add_reaction("‼️")

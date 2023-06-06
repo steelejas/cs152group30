@@ -17,6 +17,7 @@ from gpt_pii import check_post_for_pii
 from datetime import datetime, timezone
 from perspective_api import checkpost_perspective
 from openai_harassment import checkpost_openai
+import uuid
 
 # Set up logging to the console
 logger = logging.getLogger('discord')
@@ -100,7 +101,7 @@ class ModBot(discord.Client):
             reply =  "Use the `report` command to begin the reporting process.\n"
             reply += "Use the `cancel` command to cancel the report process.\n"
             reply += "Use the `list` command to see past reports filed.\n"
-            reply += "Use the `search \{report_id\}` command to see status of report with corresponding id.\n"
+            reply += "Use the `search {report_id}` command to see status of report with corresponding id.\n"
             reply += "Use the `strike` command to see your content strikes and false report strikes.\n"
             reply += "Use the `blocklist` command to see blocklist, blocked regex, and add or remove words or regex from the blocklist.\n"
             await message.channel.send(reply)
@@ -152,11 +153,11 @@ class ModBot(discord.Client):
                 self.blocklist_interaction.pop(author_id)
 
         elif message.content.startswith("list"):
+            retString = 'Reports filed:\n'
             for id, report in globals.reports.items():
-                retString = 'Reports filed:\n'
                 if report.reporter == message.author:
                     retString += f'{id}\n'
-                retString += '\n'
+            retString += '\n'
             await message.channel.send(retString)
 
         elif message.content.startswith("strike"):
@@ -194,23 +195,24 @@ class ModBot(discord.Client):
             retString += f'false report strikes: {false_report_strike_number}\n\n'
             await message.channel.send(retString)
 
-
-
-        elif message.content.startsWith("search"):
-            if message.content.strip().split(' ') != 2:
+        elif message.content.startswith("search"):
+            if len(message.content.strip().split(' ')) != 2:
                 await message.channel.send("Please search for report with command `search \{report_id\}`")
                 return
-            id = message.content.strip().split(' ')[1]
+            try:
+                id = uuid.UUID(message.content.strip().split(' ')[1])
+            except:
+                return
             if id not in globals.reports or globals.reports[id].reporter != message.author:
                 await message.channel.send("Invalid ID. Please search for a report id that you have filed.")
                 return
             report = globals.reports[id]
             report_string = f'''Report {report.id} at time {report.report_created_time.astimezone()}:
 \tReported message:
-\t{message.author.name}: "{message.content}"
-\tLink:{message.jump_url}
+\t{report.message.author.name}: "{report.message.content}"
+\tLink:{report.message.jump_url}
 \tReporter: {report.reporter.name}
-\tAbuse Type: {self.report.abuse_type}\n'''
+\tAbuse Type: {report.abuse_type}\n'''
             if report.abuse_type == "Other":
                 report_string += f'''\t\tAbuse Type Details: {report.other_details}\n'''  
             elif report.abuse_type == "Harassment":
@@ -239,7 +241,7 @@ class ModBot(discord.Client):
         # Forward the message to the mod channel
         mod_channel = self.auto_mod_channels[message.guild.id]
         await mod_channel.send(f'Forwarded message:\n{message.author.name}: "{message.content}"')
-        score, reason = self.eval_text(message)
+        score, reason = await self.eval_text(message)
         await mod_channel.send(self.code_format(message.content, score, reason))
         if score == 1:
             await message.delete()
@@ -283,7 +285,7 @@ Your account has been banned for abuse.''')
             report.set_escalation()
             if reporter != 'auto report': await reporter_dm.send(f'Your report {report.id} has been escalated to a specialized team.')
         elif payload.emoji.name == "❔":
-            if reporter != 'auto report': 
+            if reporter == 'auto report': 
                 return
             if reporter not in globals.user_false_report_strikes:
                 globals.user_false_report_strikes[reporter] = list()
@@ -349,7 +351,7 @@ Your account has been banned.''')
             
 
 
-    def eval_text(self, message):
+    async def eval_text(self, message):
         ''''
         TODO: Once you know how you want to evaluate messages in your channel, 
         insert your code here! This will primarily be used in Milestone 3. 
@@ -365,7 +367,7 @@ Your account has been banned.''')
                 start_pos = lowercase_message.find(word)
                 end_pos = start_pos + len(word)
                 reason = f"contains blocked word or expression: `{word}` at " + \
-                f"\"{stripped_message[0: start_pos]}`{stripped_message[start_pos: end_pos]}`{stripped_message[end_pos: len(message)]}\""
+                f"\"{stripped_message[0: start_pos]}`{stripped_message[start_pos: end_pos]}`{stripped_message[end_pos: len(stripped_message)]}\""
                 return score, reason
         for regex in blockregex:
             if re.search(regex, unidecode_message):
@@ -373,7 +375,7 @@ Your account has been banned.''')
                 end_pos = re.search(regex, unidecode_message).span()[1]
                 score = 1
                 reason = f"contains blocked regex `{regex}` at " + \
-                f"\"{stripped_message[0: start_pos]}`{stripped_message[start_pos: end_pos]}`{stripped_message[end_pos: len(message)]}\""
+                f"\"{stripped_message[0: start_pos]}`{stripped_message[start_pos: end_pos]}`{stripped_message[end_pos: len(stripped_message)]}\""
                 return score, reason
         if check_post_for_pii(unidecode_message):
             score = 1
@@ -385,7 +387,7 @@ Your account has been banned.''')
 
         if perspective_result[0] and openai_result:
             score=1
-            reason=f"post has been flagged by openai and perspective for potential harassment\n"
+            reason= "post has been flagged by openai and perspective for potential harassment\n"
             return score,reason 
         elif perspective_result[0] or openai_result:
             report = reported_message('auto report', message)
@@ -396,7 +398,14 @@ Your account has been banned.''')
                 other_details = f'Flagged by perspective for high {perspective_result[1]} value'
             report.set_other(other_details)
             globals.reports[report.id] = report
-            self.send_autoreport(report)
+            await send_autoreport(self.mod_channels[message.guild.id], report)
+            score = 0.5
+            if openai_result:
+                reason = "post has been flagged by openai and a report was sent\n"
+            else:
+                reason = "post has been flagged by perspective and a report was sent\n"
+            return score,reason
+        return score,reason 
 
 
     

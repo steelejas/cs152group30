@@ -19,7 +19,7 @@ with open(token_path) as f:
     openai.api_key = tokens['openai']
 
 
-def check_post_for_pii(self, post):
+def check_post_for_pii(post):
 
     response = openai.ChatCompletion.create(
         model="gpt-3.5-turbo", # most advanced Openai model available to everyone
