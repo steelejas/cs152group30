@@ -104,6 +104,9 @@ class ModBot(discord.Client):
         if author_id in self.reports:
             # Let the report class handle this message; forward all the messages it returns to uss
             responses = await self.reports[author_id].handle_message(message)
+            if responses is None:
+                self.reports[author_id] = Report(self)
+                responses = await self.reports[author_id].handle_message(message)
             for r in responses:
                 await message.channel.send(r)
 
@@ -114,6 +117,9 @@ class ModBot(discord.Client):
         elif author_id in self.blocklist_interaction:
             # Let the report class handle this message; forward all the messages it returns to uss
             responses = await self.blocklist_interaction[author_id].handle_message(message)
+            if responses is None:
+                self.blocklist_interaction[author_id] = BlocklistInteraction(self)
+                responses = await self.blocklist_interaction[author_id].handle_message(message)
             for r in responses:
                 await message.channel.send(r)
 

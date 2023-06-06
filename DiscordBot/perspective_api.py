@@ -21,12 +21,15 @@ client = discovery.build(
 )
 
 def checkpost_perspective(post, attributes):
-  analyze_request = {
-    'comment': { 'text': post },
-    'requestedAttributes': {'TOXICITY': {}, 'SPAM':{},'IDENTITY_ATTACK':{},'INSULT':{},'THREAT':{}}
-  }
-  response = client.comments().analyze(body=analyze_request).execute()
-  for attribute in attributes:
-    if (response["attributeScores"][attribute]["summaryScore"]["value"] > attributes[attribute]):
-      return True, attribute
-  return False, None
+    try:
+        analyze_request = {
+            'comment': { 'text': post },
+            'requestedAttributes': {'TOXICITY': {}, 'SPAM':{},'IDENTITY_ATTACK':{},'INSULT':{},'THREAT':{}}
+        }
+        response = client.comments().analyze(body=analyze_request).execute()
+        for attribute in attributes:
+            if (response["attributeScores"][attribute]["summaryScore"]["value"] > attributes[attribute]):
+            return True, attribute
+        return False, None
+    except: 
+        return False, None

@@ -1,13 +1,9 @@
 from enum import Enum, auto
-import discord
-import re
-from datetime import datetime, timezone
-import pytz
-import uuid
-import globals
-import followers
+from badwordlist import bad_word_list
 
 blocklist = {"fuck"}
+
+blocklist = bad_word_list
 
 blockregex = set()
     

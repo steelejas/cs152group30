@@ -279,8 +279,8 @@ or type skip to skip.'''
         self.state = State.REPORT_COMPLETE
         return_string = list()
         # randomize large and small accounts
-        if message.author.name not in followers.user_followers:
-            followers.user_followers[message.author.name] = random.randint(1, 10000)
+        if self.report.message.author.name not in followers.user_followers:
+            followers.user_followers[self.report.message.author.name] = random.randint(1, 10000)
         # Store report in list
         globals.reports[self.report.id] = self.report
         return_string.append(await self.send_reports(self.report))
