@@ -362,3 +362,45 @@ This may include removing the content.'''
 
     def report_complete(self):
         return self.state == State.REPORT_COMPLETE
+    
+
+async def send_autoreport(client, report):
+    # Forward the report to the mod channel
+    message = report.message
+    mod_channel = client.mod_channels[message.guild.id]
+    report_string = f'''Report {report.id} at time {report.report_created_time.astimezone()}:
+\tReported message:
+\t{message.author.name}: "{message.content}"
+\tLink:{message.jump_url}
+\tReporter: {'auto report'}
+\tAbuse Type: {report.abuse_type}\n'''
+    if report.abuse_type == "Other":
+        report_string += f'''\t\tAbuse Type Details: {report.other_details}\n'''  
+    elif report.abuse_type == "Harassment":
+        report_string += f'''\t\tHarassment Type: {report.harassment_type}\n'''
+        report_string += f'''\t\tMultiple Harassers: {report.multiple_harasser}\n'''
+    elif report.abuse_type == "Imminent Danger":
+        report_string += f'\t\tImminent Danger Type: {report.imminent_danger}\n'
+    report_string += f'\tHas reporter turned on safety mode: {report.safety_mode}\n'
+    report_string += f'\tHas reporter blocked message sender: {report.message.author.name in report.block_user}\n'
+    report_string += '''Press ⏱️ to place abuser under slow mode.
+Press 🛑 to block abuser for reporter.
+Press 🗑️ to delete the message.\n'''
+    if followers.user_followers[message.author.name] > 5000:
+        report_string += 'Press ‼️ to send strike and warning to abuser.\n'
+    else: 
+        report_string += 'Press ❗ to send strike and warning to abuser.\n'
+    report_string += '''Press ❌ to ban abuser.
+Press ⬆️ to escalate to a specialized team that handles organized harassment'''
+    sent_report = await mod_channel.send(report_string)
+    await sent_report.add_reaction("⏱️")
+    await sent_report.add_reaction("🛑")
+    await sent_report.add_reaction("🗑️")
+    if followers.user_followers[message.author.name] > 5000:
+        await sent_report.add_reaction("‼️")
+    else: 
+        await sent_report.add_reaction("❗")
+    await sent_report.add_reaction("❌")
+    await sent_report.add_reaction("⬆️")
+
+    globals.report_message_to_id[sent_report.id] = report.id
