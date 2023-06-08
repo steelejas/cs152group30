@@ -303,7 +303,7 @@ Your account has been banned for abuse. If you wish to appeal your ban, please g
                 report.set_false_report_strike()
                 await reporter_dm.send(f'''Your report {report.id} has been resolved and classified as a malicious false report.
 You have been given a strike and is currently at {len(globals.user_false_report_strikes[reporter])} strikes.
-You would be banned if you reach 3 strikes. Please refrain from filing malicious false reports.''')
+You would be restricted from filing reports if you reach 3 strikes. Please refrain from filing malicious false reports.''')
             else:
                 await reporter_dm.send(f'''Your report {report.id} has been resolved and classified as a malicious false report.
 You have reached three strikes for false reports. 
