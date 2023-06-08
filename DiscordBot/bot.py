@@ -279,7 +279,7 @@ As such, your message has been deleted.''')
         elif payload.emoji.name == "❌":
             report.set_banned()
             await abuser_dm.send(f'''Your message {report.message.jump_url} with text {report.message.content} has been reported for {report.abuse_type}.
-Your account has been banned for abuse.''')
+Your account has been banned for abuse. If you wish to appeal your ban, please go to our appeal website.''')
             if reporter != 'auto report': await reporter_dm.send(f'Your report {report.id} has been resolved. The abuser has been banned.')
         elif payload.emoji.name == "⬆️":
             report.set_escalation()
@@ -307,7 +307,7 @@ You would be banned if you reach 3 strikes. Please refrain from filing malicious
             else:
                 await reporter_dm.send(f'''Your report {report.id} has been resolved and classified as a malicious false report.
 You have reached three strikes for false reports. 
-Your account has been banned for filing malicious false reports.''')
+Your account has been restricted from filing further malicious reports. If you wish to appeal the restriction, please go to our appeal website.''')
         elif payload.emoji.name == "❗" or payload.emoji.name == "‼️":
             if abuser not in globals.user_strikes:
                 globals.user_strikes[abuser] = list()
@@ -346,16 +346,12 @@ As a large account, please demonstrate caution before sharing or posting and ref
                 report.set_banned()
                 await abuser_dm.send(f'''Your message {report.message.jump_url} with text {report.message.content} has been reported for {report.abuse_type}.
 You have reached three strikes for abuses.
-Your account has been banned.''')
+Your account has been banned. If you wish to appeal your ban, please go to our appeal website.''')
                 if reporter != 'auto report': await reporter_dm.send(f'Your report {report.id} has been resolved. The abuser has been banned.')
             
 
 
     async def eval_text(self, message):
-        ''''
-        TODO: Once you know how you want to evaluate messages in your channel, 
-        insert your code here! This will primarily be used in Milestone 3. 
-        '''
         score = 0
         reason = "N/A"
         stripped_message = message.content.strip()
