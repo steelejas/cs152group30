@@ -6,9 +6,17 @@ import json
 import logging
 import re
 import requests
-from report import Report
+from report import Report, send_autoreport, reported_message
 import pdb
 import globals
+#import badwordlist
+from blocklist import BlocklistInteraction, blocklist, blockregex
+from unidecode import unidecode
+from gpt_pii import check_post_for_pii
+from datetime import datetime, timezone
+from perspective_api import checkpost_perspective
+from openai_harassment import checkpost_openai
+import uuid
 
 # Set up logging to the console
 logger = logging.getLogger('discord')
@@ -26,16 +34,21 @@ with open(token_path) as f:
     tokens = json.load(f)
     discord_token = tokens['discord']
 
+perspective_attributes = {"TOXICITY":0.5,"SPAM":0.7,"IDENTITY_ATTACK":0.5,"INSULT":0.5,"THREAT":0.8}
 
 class ModBot(discord.Client):
     def __init__(self): 
         intents = discord.Intents.default()
-        intents.messages = True
+        try: 
+            intents.message_content = True
+        except: 
+            intents.messages = True
         super().__init__(command_prefix='.', intents=intents)
         self.group_num = None
         self.mod_channels = {} # Map from guild to the mod channel id for that guild
         self.auto_mod_channels = {} # Map from guild to the automatic forwarding mod channel id for that guild
         self.reports = {} # Map from user IDs to the state of their report
+        self.blocklist_interaction = {} # Map from user ID to current interaction with blocklist
 
     async def on_ready(self):
         print(f'{self.user.name} has connected to Discord! It is these guilds:')
@@ -78,28 +91,144 @@ class ModBot(discord.Client):
         if message.content == Report.HELP_KEYWORD:
             reply =  "Use the `report` command to begin the reporting process.\n"
             reply += "Use the `cancel` command to cancel the report process.\n"
+            reply += "Use the `list` command to see past reports filed.\n"
+            reply += "Use the `search {report_id}` command to see status of report with corresponding id.\n"
+            reply += "Use the `strike` command to see your content strikes and false report strikes.\n"
+            reply += "Use the `blocklist` command to see blocklist, blocked regex, and add or remove words or regex from the blocklist.\n"
             await message.channel.send(reply)
             return
 
         author_id = message.author.id
         responses = []
 
-        # Only respond to messages if they're part of a reporting flow
-        if author_id not in self.reports and not message.content.startswith(Report.START_KEYWORD):
+        if author_id in self.reports:
+            # Let the report class handle this message; forward all the messages it returns to uss
+            responses = await self.reports[author_id].handle_message(message)
+            if responses is None:
+                self.reports[author_id] = Report(self)
+                responses = await self.reports[author_id].handle_message(message)
+            for r in responses:
+                await message.channel.send(r)
+
+            # If the report is complete or cancelled, remove it from our map
+            if self.reports[author_id].report_complete():
+                self.reports.pop(author_id)
+        
+        elif author_id in self.blocklist_interaction:
+            # Let the report class handle this message; forward all the messages it returns to uss
+            responses = await self.blocklist_interaction[author_id].handle_message(message)
+            if responses is None:
+                self.blocklist_interaction[author_id] = BlocklistInteraction(self)
+                responses = await self.blocklist_interaction[author_id].handle_message(message)
+            for r in responses:
+                await message.channel.send(r)
+
+            # If the report is complete or cancelled, remove it from our map
+            if self.blocklist_interaction[author_id].blocklist_complete():
+                self.blocklist_interaction.pop(author_id)
+
+        elif message.content.startswith(Report.START_KEYWORD):
+            self.reports[author_id] = Report(self)
+            # Let the report class handle this message; forward all the messages it returns to uss
+            responses = await self.reports[author_id].handle_message(message)
+            for r in responses:
+                await message.channel.send(r)
+
+            # If the report is complete or cancelled, remove it from our map
+            if self.reports[author_id].report_complete():
+                self.reports.pop(author_id)
+        
+        elif message.content.startswith(BlocklistInteraction.START_KEYWORD):
+            self.blocklist_interaction[author_id] = BlocklistInteraction(self)
+            # Let the report class handle this message; forward all the messages it returns to uss
+            responses = await self.blocklist_interaction[author_id].handle_message(message)
+            for r in responses:
+                await message.channel.send(r)
+
+            # If the report is complete or cancelled, remove it from our map
+            if self.blocklist_interaction[author_id].blocklist_complete():
+                self.blocklist_interaction.pop(author_id)
+
+        elif message.content.startswith("list"):
+            retString = 'Reports filed:\n'
+            for id, report in globals.reports.items():
+                if report.reporter == message.author:
+                    retString += f'{id}\n'
+            retString += '\n'
+            await message.channel.send(retString)
+
+        elif message.content.startswith("strike"):
+            retString = f'{message.author}\'s strikes:\n'
+            time = datetime.now(timezone.utc)
+            user = message.author 
+            if user not in globals.user_strikes:
+                strike_number = 0
+            else:
+                while True:
+                    if len(globals.user_strikes[user]) == 0:
+                        break
+                    strike = globals.user_strikes[user][0]
+                    timediff = time - strike.report_created_time
+                    if timediff.days >= 365:
+                        globals.user_strikes[user].pop(0) 
+                    else:
+                        break
+                strike_number = len(globals.user_strikes[user])
+            retString += f'strikes: {strike_number}\n'
+
+            if user not in globals.user_false_report_strikes:
+                false_report_strike_number = 0
+            else:
+                while True:
+                    if len(globals.user_false_report_strikes[user]) == 0:
+                        break
+                    strike = globals.user_false_report_strikes[user][0]
+                    timediff = time - strike.report_created_time
+                    if timediff.days >= 30:
+                        globals.user_false_report_strikes[user].pop(0) 
+                    else:
+                        break
+                false_report_strike_number = len(globals.user_false_report_strikes[user])
+            retString += f'false report strikes: {false_report_strike_number}\n\n'
+            await message.channel.send(retString)
+
+        elif message.content.startswith("search"):
+            if len(message.content.strip().split(' ')) != 2:
+                await message.channel.send("Please search for report with command `search \{report_id\}`")
+                return
+            try:
+                id = uuid.UUID(message.content.strip().split(' ')[1])
+            except:
+                return
+            if id not in globals.reports or globals.reports[id].reporter != message.author:
+                await message.channel.send("Invalid ID. Please search for a report id that you have filed.")
+                return
+            report = globals.reports[id]
+            report_string = f'''Report {report.id} at time {report.report_created_time.astimezone()}:
+\tReported message:
+\t{report.message.author.name}: "{report.message.content}"
+\tLink:{report.message.jump_url}
+\tReporter: {report.reporter.name}
+\tAbuse Type: {report.abuse_type}\n'''
+            if report.abuse_type == "Other":
+                report_string += f'''\t\tAbuse Type Details: {report.other_details}\n'''  
+            elif report.abuse_type == "Harassment":
+                report_string += f'''\t\tHarassment Type: {report.harassment_type}\n'''
+                report_string += f'''\t\tMultiple Harassers: {report.multiple_harasser}\n'''
+            elif report.abuse_type == "Imminent Danger":
+                report_string += f'\t\tImminent Danger Type: {report.imminent_danger}\n'
+            report_string += f'\tHas reporter turned on safety mode: {report.safety_mode}\n'
+            report_string += f'\tIs this a false report: {report.false_report_strike}\n'
+            report_string += f'\tHas the sender been placed on slow mode: {report.slow_mode}\n'
+            report_string += f'\tHas the sender been blocked: {report.message.author.name in report.block_user}\n'
+            report_string += f'\tHas the message been deleted: {report.deleted}\n'
+            report_string += f'\tHas the message sender been given a strike: {report.strike}\n'
+            report_string += f'\tHas the message been escalated: {report.escalation}\n'
+            await message.channel.send(report_string)
+
+        else:
             return
 
-        # If we don't currently have an active report for this user, add one
-        if author_id not in self.reports:
-            self.reports[author_id] = Report(self)
-
-        # Let the report class handle this message; forward all the messages it returns to uss
-        responses = await self.reports[author_id].handle_message(message)
-        for r in responses:
-            await message.channel.send(r)
-
-        # If the report is complete or cancelled, remove it from our map
-        if self.reports[author_id].report_complete():
-            self.reports.pop(author_id)
 
     async def handle_channel_message(self, message):
         # Only handle messages sent in the "group-#" channel
@@ -109,8 +238,13 @@ class ModBot(discord.Client):
         # Forward the message to the mod channel
         mod_channel = self.auto_mod_channels[message.guild.id]
         await mod_channel.send(f'Forwarded message:\n{message.author.name}: "{message.content}"')
-        scores = self.eval_text(message.content)
-        await mod_channel.send(self.code_format(scores))
+        score, reason = await self.eval_text(message)
+        await mod_channel.send(self.code_format(message.content, score, reason))
+        if score == 1:
+            await message.delete()
+            abuser = message.author
+            abuser_dm = abuser.dm_channel if abuser.dm_channel else await abuser.create_dm()
+            await abuser_dm.send(f'''Your message {message.jump_url} with text {message.content} has been deleted for reason: {reason}.''')
 
     async def on_raw_reaction_add(self, payload):
         if not payload.channel_id == self.mod_channels[payload.guild_id].id:
@@ -126,25 +260,33 @@ class ModBot(discord.Client):
         reporter = report.reporter
         abuser = report.message.author
         abuser_dm = abuser.dm_channel if abuser.dm_channel else await abuser.create_dm()
-        reporter_dm = reporter.dm_channel if reporter.dm_channel else await reporter.create_dm()
+        if reporter != 'auto report': 
+            reporter_dm = reporter.dm_channel if reporter.dm_channel else await reporter.create_dm()
         if payload.emoji.name == "⏱️":
+            report.set_slow_mode()
             await abuser_dm.send(f'''Your message {report.message.jump_url} with text {report.message.content} has been reported for {report.abuse_type}. 
 As such, your account would be placed under slow mode for the next 72 hours.''')
-            await reporter_dm.send(f'Your report {report.id} has been resolved. The abuser has been placed under slow mode.')
+            if reporter != 'auto report': await reporter_dm.send(f'Your report {report.id} has been resolved. The abuser has been placed under slow mode.') 
         elif payload.emoji.name == "🛑":
-            await reporter_dm.send(f'Your report {report.id} has been resolved. All messages from the abuser will now be blocked.')
+            report.set_block_user(abuser.name)
+            if reporter != 'auto report': await reporter_dm.send(f'Your report {report.id} has been resolved. All messages from the abuser will now be blocked.')
         elif payload.emoji.name == "🗑️":
             await report.message.delete()
+            report.set_deleted()
             await abuser_dm.send(f'''Your message {report.message.jump_url} with text {report.message.content} has been reported for {report.abuse_type}. 
 As such, your message has been deleted.''')
-            await reporter_dm.send(f'Your report {report.id} has been resolved. The message has been deleted.')
+            if reporter != 'auto report': await reporter_dm.send(f'Your report {report.id} has been resolved. The message has been deleted.')
         elif payload.emoji.name == "❌":
+            report.set_banned()
             await abuser_dm.send(f'''Your message {report.message.jump_url} with text {report.message.content} has been reported for {report.abuse_type}.
-Your account has been banned for abuse.''')
-            await reporter_dm.send(f'Your report {report.id} has been resolved. The abuser has been banned.')
+Your account has been banned for abuse. If you wish to appeal your ban, please go to our appeal website.''')
+            if reporter != 'auto report': await reporter_dm.send(f'Your report {report.id} has been resolved. The abuser has been banned.')
         elif payload.emoji.name == "⬆️":
-            await reporter_dm.send(f'Your report {report.id} has been escalated to a specialized team.')
+            report.set_escalation()
+            if reporter != 'auto report': await reporter_dm.send(f'Your report {report.id} has been escalated to a specialized team.')
         elif payload.emoji.name == "❔":
+            if reporter == 'auto report': 
+                return
             if reporter not in globals.user_false_report_strikes:
                 globals.user_false_report_strikes[reporter] = list()
             while True:
@@ -158,13 +300,14 @@ Your account has been banned for abuse.''')
                     break
             globals.user_false_report_strikes[reporter].append(report)
             if len(globals.user_false_report_strikes[reporter]) < 3:
+                report.set_false_report_strike()
                 await reporter_dm.send(f'''Your report {report.id} has been resolved and classified as a malicious false report.
 You have been given a strike and is currently at {len(globals.user_false_report_strikes[reporter])} strikes.
 You would be banned if you reach 3 strikes. Please refrain from filing malicious false reports.''')
             else:
                 await reporter_dm.send(f'''Your report {report.id} has been resolved and classified as a malicious false report.
 You have reached three strikes for false reports. 
-Your account has been banned for filing malicious false reports.''')
+Your account has been restricted from filing further malicious reports. If you wish to appeal the restriction, please go to our appeal website.''')
         elif payload.emoji.name == "❗" or payload.emoji.name == "‼️":
             if abuser not in globals.user_strikes:
                 globals.user_strikes[abuser] = list()
@@ -178,13 +321,14 @@ Your account has been banned for filing malicious false reports.''')
                 else:
                     break
             globals.user_strikes[abuser].append(report)
+            report.set_strike()
             if len(globals.user_strikes[abuser]) == 2 and payload.emoji.name == "‼️":
                 await abuser_dm.send(f'''Your message {report.message.jump_url} with text {report.message.content} has been reported for {report.abuse_type}. 
 Your account has been given a strike for abuse and is currently at {len(globals.user_strikes[abuser])} strikes.
 Since you have a large account, your account has been slowed down for 2 strikes. 
 You would be banned if you reach 3 strikes.
 As a large account, please demonstrate caution before sharing or posting and refrain from posting any abuse''')
-                await reporter_dm.send(f'Your report {report.id} has been resolved. The abuser has been placed on slow mode.')
+                if reporter != 'auto report': await reporter_dm.send(f'Your report {report.id} has been resolved. The abuser has been placed on slow mode.')
             elif len(globals.user_strikes[abuser]) < 3:
                 if payload.emoji.name == "❗":
                     await abuser_dm.send(f'''Your message {report.message.jump_url} with text {report.message.content} has been reported for {report.abuse_type}. 
@@ -197,30 +341,77 @@ Your account has been given a strike for abuse and is currently at {len(globals.
 Since you have a large account, your account would be slowed down if you reach 2 strikes. 
 You would be banned if you reach 3 strikes.
 As a large account, please demonstrate caution before sharing or posting and refrain from posting any abuse''')
-                await reporter_dm.send(f'Your report {report.id} has been resolved. The abuser has been given a strike.')
+                if reporter != 'auto report': await reporter_dm.send(f'Your report {report.id} has been resolved. The abuser has been given a strike.')
             else:
+                report.set_banned()
                 await abuser_dm.send(f'''Your message {report.message.jump_url} with text {report.message.content} has been reported for {report.abuse_type}.
 You have reached three strikes for abuses.
-Your account has been banned.''')
-                await reporter_dm.send(f'Your report {report.id} has been resolved. The abuser has been banned.')
+Your account has been banned. If you wish to appeal your ban, please go to our appeal website.''')
+                if reporter != 'auto report': await reporter_dm.send(f'Your report {report.id} has been resolved. The abuser has been banned.')
             
 
 
-    def eval_text(self, message):
-        ''''
-        TODO: Once you know how you want to evaluate messages in your channel, 
-        insert your code here! This will primarily be used in Milestone 3. 
-        '''
-        return message
+    async def eval_text(self, message):
+        score = 0
+        reason = "N/A"
+        stripped_message = message.content.strip()
+        unidecode_message = unidecode(stripped_message, errors='preserve')
+        lowercase_message = unidecode_message.lower()
+        for word in blocklist:
+            if word in lowercase_message:
+                score = 1
+                start_pos = lowercase_message.find(word)
+                end_pos = start_pos + len(word)
+                reason = f"contains blocked word or expression: `{word}` at " + \
+                f"\"{stripped_message[0: start_pos]}`{stripped_message[start_pos: end_pos]}`{stripped_message[end_pos: len(stripped_message)]}\""
+                return score, reason
+        for regex in blockregex:
+            if re.search(regex, unidecode_message):
+                start_pos = re.search(regex, unidecode_message).span()[0]
+                end_pos = re.search(regex, unidecode_message).span()[1]
+                score = 1
+                reason = f"contains blocked regex `{regex}` at " + \
+                f"\"{stripped_message[0: start_pos]}`{stripped_message[start_pos: end_pos]}`{stripped_message[end_pos: len(stripped_message)]}\""
+                return score, reason
+        if check_post_for_pii(unidecode_message):
+            score = 1
+            reason = "contains pii: home street"
+            return score, reason
+        
+        perspective_result = checkpost_perspective(unidecode_message, perspective_attributes)
+        openai_result = checkpost_openai(unidecode_message)
+
+        if perspective_result[0] and openai_result:
+            score=1
+            reason= "post has been flagged by openai and perspective for potential harassment\n"
+            return score,reason 
+        elif perspective_result[0] or openai_result:
+            report = reported_message('auto report', message)
+            report.set_type('Other')
+            if openai_result:
+                other_details = 'Flagged by open ai'
+            else:
+                other_details = f'Flagged by perspective for high {perspective_result[1]} value'
+            report.set_other(other_details)
+            globals.reports[report.id] = report
+            await send_autoreport(self.mod_channels[message.guild.id], report)
+            score = 0.5
+            if openai_result:
+                reason = "post has been flagged by openai and a report was sent\n"
+            else:
+                reason = "post has been flagged by perspective and a report was sent\n"
+            return score,reason
+        return score,reason 
+
 
     
-    def code_format(self, text):
+    def code_format(self, text, score, reason):
         ''''
         TODO: Once you know how you want to show that a message has been 
         evaluated, insert your code here for formatting the string to be 
         shown in the mod channel. 
         '''
-        return "Evaluated: '" + text+ "'"
+        return "Evaluated: '" + text+ "': " + str(score) + ", reason: " + str(reason)
 
 
 client = ModBot()

@@ -1,0 +1,6 @@
+discord.py
+uuid
+requests
+google-api-python-client
+openai
+unidecode

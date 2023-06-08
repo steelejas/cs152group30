@@ -2,10 +2,10 @@ from enum import Enum, auto
 import discord
 import re
 from datetime import datetime, timezone
-import pytz
 import uuid
 import globals
 import followers
+import random
 
 report_category = {1: "Harassment", 2: "Spam", 3: "Fraud", 4: "Graphic/Violent Content, Gore", 5: "Imminent Danger", 6: "Other"}
 
@@ -13,7 +13,7 @@ target = {1: "Against Myself", 2: "Against Someone Else", 3: "Against a group of
 
 imminent_danger_category = {1: "Credible threat of violence", 2: "Self-harm or suicidal intent", 3: "Doxxing"}
 
-harassment_category = {1: "Organizing of Harassment", 2: "Impersonation", 3: "Hate Speech", 4: "Offensive content", 5: "Sexual Harassment", 6: "Doxxing", 7: "Spam"}
+harassment_category = {1: "Organizing of Harassment", 2: "Misinformation/Impersonation", 3: "Hate Speech", 4: "Offensive content", 5: "Sexual Harassment", 6: "Doxxing", 7: "Spam"}
 
 class reported_message:
     def __init__(self, reporter, message):
@@ -24,6 +24,12 @@ class reported_message:
         self.report_created_time = datetime.now(timezone.utc)
         self.safety_mode = False
         self.block_user = set()
+        self.false_report_strike = False
+        self.slow_mode = False
+        self.deleted = False
+        self.strike = False
+        self.escalation = False
+        self.banned = False
     
     def set_type(self, abuse_type):
         self.abuse_type = abuse_type
@@ -48,6 +54,24 @@ class reported_message:
     
     def set_block_user(self, blocked_user):
         self.block_user.add(blocked_user)
+    
+    def set_false_report_strike(self):
+        self.false_report_strike = True
+
+    def set_slow_mode(self):
+        self.slow_mode = True
+
+    def set_deleted(self):
+        self.deleted = True
+
+    def set_banned(self):
+        self.banned = True
+
+    def set_strike(self):
+        self.strike = True
+
+    def set_escalation(self):
+        self.escalation = True
 
     
 class State(Enum):
@@ -135,7 +159,7 @@ or say `cancel` to cancel.''']
                 self.state = State.HARASSMENT_TYPE
                 return ['''Please select the type of harassment by entering its number.
 1. Organizing of Harassment
-2. Impersonation
+2. Misinformation/Impersonation
 3. Hate Speech
 4. Offensive content
 5. Sexual Harassment
@@ -254,6 +278,9 @@ or type skip to skip.'''
         # Set state to end
         self.state = State.REPORT_COMPLETE
         return_string = list()
+        # randomize large and small accounts
+        if self.report.message.author.name not in followers.user_followers:
+            followers.user_followers[self.report.message.author.name] = random.randint(1, 10000)
         # Store report in list
         globals.reports[self.report.id] = self.report
         return_string.append(await self.send_reports(self.report))
@@ -273,6 +300,9 @@ or type skip to skip.'''
                     new_report.set_safety()
                 if len(self.report.block_user) > 0:
                     new_report.set_block_user(message.author.name)
+                # randomize large and small accounts
+                if message.author.name not in followers.user_followers:
+                    followers.user_followers[message.author.name] = random.randint(1, 10000)
                 globals.reports[new_report.id] = new_report
                 return_string.append(await self.send_reports(new_report))
         return return_string
@@ -308,16 +338,16 @@ Press 🗑️ to delete the message.\n'''
 Press ❔ to strike reporter for false report. (Only strike if false report is intentional and malicious)
 Press ⬆️ to escalate to a specialized team that handles organized harassment'''
         sent_report = await mod_channel.send(report_string)
-        await sent_report.add_reaction(emoji="⏱️")
-        await sent_report.add_reaction(emoji="🛑")
-        await sent_report.add_reaction(emoji="🗑️")
+        await sent_report.add_reaction("⏱️")
+        await sent_report.add_reaction("🛑")
+        await sent_report.add_reaction("🗑️")
         if followers.user_followers[message.author.name] > 5000:
-            await sent_report.add_reaction(emoji="‼️")
+            await sent_report.add_reaction("‼️")
         else: 
-            await sent_report.add_reaction(emoji="❗")
-        await sent_report.add_reaction(emoji="❌")
-        await sent_report.add_reaction(emoji="❔")
-        await sent_report.add_reaction(emoji="⬆️")
+            await sent_report.add_reaction("❗")
+        await sent_report.add_reaction("❌")
+        await sent_report.add_reaction("❔")
+        await sent_report.add_reaction("⬆️")
 
         globals.report_message_to_id[sent_report.id] = report.id
 
@@ -338,3 +368,42 @@ This may include removing the content.'''
 
     def report_complete(self):
         return self.state == State.REPORT_COMPLETE
+    
+
+async def send_autoreport(mod_channel, report):
+    # Forward the report to the mod channel
+    message = report.message
+    report_string = f'''Report {report.id} at time {report.report_created_time.astimezone()}:
+\tReported message:
+\t{message.author.name}: "{message.content}"
+\tLink:{message.jump_url}
+\tReporter: {'auto report'}
+\tAbuse Type: {report.abuse_type}\n'''
+    if report.abuse_type == "Other":
+        report_string += f'''\t\tAbuse Type Details: {report.other_details}\n'''  
+    elif report.abuse_type == "Harassment":
+        report_string += f'''\t\tHarassment Type: {report.harassment_type}\n'''
+        report_string += f'''\t\tMultiple Harassers: {report.multiple_harasser}\n'''
+    elif report.abuse_type == "Imminent Danger":
+        report_string += f'\t\tImminent Danger Type: {report.imminent_danger}\n'
+    report_string += f'\tHas reporter turned on safety mode: {report.safety_mode}\n'
+    report_string += f'\tHas reporter blocked message sender: {report.message.author.name in report.block_user}\n'
+    report_string += '''Press ⏱️ to place abuser under slow mode.
+Press 🗑️ to delete the message.\n'''
+    if followers.user_followers[message.author.name] > 5000:
+        report_string += 'Press ‼️ to send strike and warning to abuser.\n'
+    else: 
+        report_string += 'Press ❗ to send strike and warning to abuser.\n'
+    report_string += '''Press ❌ to ban abuser.
+Press ⬆️ to escalate to a specialized team that handles organized harassment'''
+    sent_report = await mod_channel.send(report_string)
+    await sent_report.add_reaction("⏱️")
+    await sent_report.add_reaction("🗑️")
+    if followers.user_followers[message.author.name] > 5000:
+        await sent_report.add_reaction("‼️")
+    else: 
+        await sent_report.add_reaction("❗")
+    await sent_report.add_reaction("❌")
+    await sent_report.add_reaction("⬆️")
+
+    globals.report_message_to_id[sent_report.id] = report.id
